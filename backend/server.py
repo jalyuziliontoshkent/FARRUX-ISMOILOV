@@ -471,19 +471,19 @@ async def seed_admin():
     elif not verify_password(admin_password, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
         logger.info("Admin paroli yangilandi")
-    # Seed demo materials
+    # Seed demo materials (narxlar $ da)
     mat_count = await db.materials.count_documents({})
     if mat_count == 0:
         demo_materials = [
-            {"name": "Blackout Parda", "category": "Parda", "price_per_sqm": 85000, "stock_quantity": 500, "unit": "kv.m", "description": "Yorug'lik o'tkazmaydigan parda", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Tull Parda", "category": "Parda", "price_per_sqm": 45000, "stock_quantity": 800, "unit": "kv.m", "description": "Shaffof tull parda", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Roller Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 120000, "stock_quantity": 300, "unit": "kv.m", "description": "Zamonaviy roller jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Gorizontal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 95000, "stock_quantity": 400, "unit": "kv.m", "description": "Alyuminiy gorizontal jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Vertikal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 75000, "stock_quantity": 350, "unit": "kv.m", "description": "Ofis uchun vertikal jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Rimskaya Parda", "category": "Parda", "price_per_sqm": 110000, "stock_quantity": 200, "unit": "kv.m", "description": "Premium rimskaya parda", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Blackout Parda", "category": "Parda", "price_per_sqm": 7.0, "stock_quantity": 500, "unit": "kv.m", "description": "Yorug'lik o'tkazmaydigan parda", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Tull Parda", "category": "Parda", "price_per_sqm": 3.5, "stock_quantity": 800, "unit": "kv.m", "description": "Shaffof tull parda", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Roller Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 10.0, "stock_quantity": 300, "unit": "kv.m", "description": "Zamonaviy roller jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Gorizontal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 8.0, "stock_quantity": 400, "unit": "kv.m", "description": "Alyuminiy gorizontal jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Vertikal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 6.0, "stock_quantity": 350, "unit": "kv.m", "description": "Ofis uchun vertikal jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Rimskaya Parda", "category": "Parda", "price_per_sqm": 9.0, "stock_quantity": 200, "unit": "kv.m", "description": "Premium rimskaya parda", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.materials.insert_many(demo_materials)
-        logger.info("Demo materiallar yaratildi")
+        logger.info("Demo materiallar yaratildi ($)")
     # Seed demo dealer
     demo_dealer = await db.users.find_one({"email": "dealer@test.uz"})
     if demo_dealer is None:
@@ -494,7 +494,7 @@ async def seed_admin():
             "role": "dealer",
             "phone": "+998901234567",
             "address": "Toshkent, Yunusobod tumani",
-            "credit_limit": 50000000,
+            "credit_limit": 5000,
             "debt": 0,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })

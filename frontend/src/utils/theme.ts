@@ -51,5 +51,5 @@ export const glassCard = StyleSheet.create({
 });
 
 export const formatPrice = (price: number) => {
-  return price.toLocaleString('uz-UZ') + " so'm";
+  return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
