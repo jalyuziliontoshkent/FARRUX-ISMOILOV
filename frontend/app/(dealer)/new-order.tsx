@@ -78,7 +78,7 @@ export default function NewOrder() {
       setItems([]);
       setNotes('');
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setTimeout(() => setSuccess(false), 5000);
     } catch (e: any) {
       console.error(e.message);
     } finally {
