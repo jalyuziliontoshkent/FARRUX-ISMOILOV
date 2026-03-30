@@ -155,9 +155,9 @@ export default function AdminDealers() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16 },
-  title: { fontSize: 24, fontWeight: '300', color: '#fff', letterSpacing: -0.5 },
+  title: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   addBtn: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent,
     alignItems: 'center', justifyContent: 'center',
   },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
@@ -169,10 +169,10 @@ const styles = StyleSheet.create({
   },
   dealerHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentSoft,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 18, fontWeight: '600', color: '#fff' },
+  avatarText: { fontSize: 18, fontWeight: '600', color: colors.accent },
   dealerInfo: { flex: 1 },
   dealerName: { fontSize: 16, fontWeight: '500', color: '#fff' },
   dealerEmail: { fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
@@ -205,8 +205,8 @@ const styles = StyleSheet.create({
     fontSize: 14, color: '#fff',
   },
   saveBtn: {
-    height: 52, backgroundColor: '#fff', borderRadius: 26,
+    height: 52, backgroundColor: colors.accent, borderRadius: 26,
     alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 20,
   },
-  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });

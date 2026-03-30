@@ -68,10 +68,8 @@ class OrderItemCreate(BaseModel): material_id: str; material_name: str; width: f
 class OrderCreate(BaseModel): items: List[OrderItemCreate]; notes: str = ""
 class OrderStatusUpdate(BaseModel): status: str; rejection_reason: str = ""
 class MessageCreate(BaseModel): receiver_id: str; text: str
-class VehicleCreate(BaseModel): plate_number: str; driver_name: str; driver_phone: str
-class VehicleUpdate(BaseModel): plate_number: Optional[str] = None; driver_name: Optional[str] = None; driver_phone: Optional[str] = None
 class AssignItemReq(BaseModel): worker_id: str
-class AssignDeliveryReq(BaseModel): vehicle_id: str
+class DeliveryInfoReq(BaseModel): driver_name: str; driver_phone: str; plate_number: str = ""
 
 # ─── AUTH ───
 @api_router.post("/auth/login")
@@ -94,7 +92,7 @@ async def create_dealer(d: DealerCreate, admin: dict = Depends(require_admin)):
 
 @api_router.get("/dealers")
 async def list_dealers(admin: dict = Depends(require_admin)):
-    out = []; 
+    out = []
     async for d in db.users.find({"role": "dealer"}, {"password_hash": 0}): d["id"] = str(d["_id"]); del d["_id"]; out.append(d)
     return out
 
@@ -127,24 +125,6 @@ async def list_workers(admin: dict = Depends(require_admin)):
 @api_router.delete("/workers/{wid}")
 async def delete_worker(wid: str, admin: dict = Depends(require_admin)):
     r = await db.users.delete_one({"_id": ObjectId(wid), "role": "worker"})
-    if r.deleted_count == 0: raise HTTPException(404, "Not found")
-    return {"message": "Deleted"}
-
-# ─── VEHICLES ───
-@api_router.post("/vehicles")
-async def create_vehicle(v: VehicleCreate, admin: dict = Depends(require_admin)):
-    doc = {"plate_number": v.plate_number.upper(), "driver_name": v.driver_name, "driver_phone": v.driver_phone, "created_at": datetime.now(timezone.utc).isoformat()}
-    r = await db.vehicles.insert_one(doc); doc["id"] = str(r.inserted_id); doc.pop("_id", None); return doc
-
-@api_router.get("/vehicles")
-async def list_vehicles(user: dict = Depends(get_current_user)):
-    out = []
-    async for v in db.vehicles.find(): v["id"] = str(v["_id"]); del v["_id"]; out.append(v)
-    return out
-
-@api_router.delete("/vehicles/{vid}")
-async def delete_vehicle(vid: str, admin: dict = Depends(require_admin)):
-    r = await db.vehicles.delete_one({"_id": ObjectId(vid)})
     if r.deleted_count == 0: raise HTTPException(404, "Not found")
     return {"message": "Deleted"}
 
@@ -184,7 +164,7 @@ async def create_order(data: OrderCreate, user: dict = Depends(get_current_user)
         total_sqm += sqm; total_price += price
         items.append({"material_id": it.material_id, "material_name": it.material_name, "width": it.width, "height": it.height, "quantity": it.quantity, "sqm": round(sqm, 2), "price_per_sqm": it.price_per_sqm, "price": round(price, 2), "notes": it.notes, "assigned_worker_id": "", "assigned_worker_name": "", "worker_status": "pending"})
     order_code = generate_order_code()
-    order = {"order_code": order_code, "dealer_id": user["id"], "dealer_name": user.get("name",""), "items": items, "total_sqm": round(total_sqm,2), "total_price": round(total_price,2), "status": "kutilmoqda", "notes": data.notes, "rejection_reason": "", "vehicle_id": "", "vehicle_info": None, "delivery_status": "", "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    order = {"order_code": order_code, "dealer_id": user["id"], "dealer_name": user.get("name",""), "items": items, "total_sqm": round(total_sqm,2), "total_price": round(total_price,2), "status": "kutilmoqda", "notes": data.notes, "rejection_reason": "", "delivery_info": None, "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}
     r = await db.orders.insert_one(order); order["id"] = str(r.inserted_id); order.pop("_id", None)
     await db.users.update_one({"_id": ObjectId(user["id"])}, {"$inc": {"debt": total_price}})
     return order
@@ -244,28 +224,27 @@ async def complete_worker_task(oid: str, item_idx: int, user: dict = Depends(get
     if item_idx >= len(order["items"]): raise HTTPException(400)
     if order["items"][item_idx].get("assigned_worker_id") != user["id"]: raise HTTPException(403, "Not your task")
     await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {f"items.{item_idx}.worker_status": "completed", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    # Check if all items completed -> mark order as ready
     order = await db.orders.find_one({"_id": ObjectId(oid)})
     all_done = all(it.get("worker_status") == "completed" for it in order["items"] if it.get("assigned_worker_id"))
     if all_done:
         await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": "tayyor", "updated_at": datetime.now(timezone.utc).isoformat()}})
     o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
 
-# ─── DELIVERY: Assign vehicle ───
+# ─── DELIVERY: Assign delivery info directly to order ───
 @api_router.put("/orders/{oid}/delivery")
-async def assign_delivery(oid: str, data: AssignDeliveryReq, admin: dict = Depends(require_admin)):
-    v = await db.vehicles.find_one({"_id": ObjectId(data.vehicle_id)})
-    if not v: raise HTTPException(404, "Vehicle not found")
-    v_info = {"plate_number": v["plate_number"], "driver_name": v["driver_name"], "driver_phone": v["driver_phone"]}
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"vehicle_id": data.vehicle_id, "vehicle_info": v_info, "delivery_status": "yo'lda", "status": "yetkazilmoqda", "updated_at": datetime.now(timezone.utc).isoformat()}})
+async def assign_delivery(oid: str, data: DeliveryInfoReq, admin: dict = Depends(require_admin)):
+    order = await db.orders.find_one({"_id": ObjectId(oid)})
+    if not order: raise HTTPException(404, "Buyurtma topilmadi")
+    d_info = {"driver_name": data.driver_name, "driver_phone": data.driver_phone, "plate_number": data.plate_number}
+    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"delivery_info": d_info, "status": "yetkazilmoqda", "updated_at": datetime.now(timezone.utc).isoformat()}})
     o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
 
-# ─── DELIVERY: Admin confirms delivery (dealer picked up) ───
+# ─── DELIVERY: Admin confirms delivery ───
 @api_router.put("/orders/{oid}/confirm-delivery")
 async def confirm_delivery(oid: str, admin: dict = Depends(require_admin)):
     order = await db.orders.find_one({"_id": ObjectId(oid)})
     if not order: raise HTTPException(404, "Buyurtma topilmadi")
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": "yetkazildi", "delivery_status": "topshirildi", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": "yetkazildi", "updated_at": datetime.now(timezone.utc).isoformat()}})
     o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
 
 # ─── CHAT ───
@@ -319,7 +298,6 @@ async def get_statistics(admin: dict = Depends(require_admin)):
         "total_dealers": await db.users.count_documents({"role": "dealer"}),
         "total_workers": await db.users.count_documents({"role": "worker"}),
         "total_materials": await db.materials.count_documents({}),
-        "total_vehicles": await db.vehicles.count_documents({}),
         "total_revenue": round(res[0]["total"],2) if res else 0,
     }
 
@@ -333,7 +311,6 @@ async def seed_admin():
         logger.info(f"Admin yaratildi: {email}")
     elif not verify_password(pw, ex["password_hash"]):
         await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(pw)}})
-    # Materials
     if await db.materials.count_documents({}) == 0:
         await db.materials.insert_many([
             {"name":"Blackout Parda","category":"Parda","price_per_sqm":7.0,"stock_quantity":500,"unit":"kv.m","description":"Yorug'lik o'tkazmaydigan parda","image_url":"https://images.pexels.com/photos/4814070/pexels-photo-4814070.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940","created_at":datetime.now(timezone.utc).isoformat()},
@@ -344,18 +321,12 @@ async def seed_admin():
             {"name":"Rimskaya Parda","category":"Parda","price_per_sqm":9.0,"stock_quantity":200,"unit":"kv.m","description":"Premium rimskaya parda","image_url":"https://images.unsplash.com/photo-1729277980958-092c5e9e2ea4?w=600","created_at":datetime.now(timezone.utc).isoformat()},
         ])
         logger.info("Materiallar yaratildi")
-    # Demo dealer
     if not await db.users.find_one({"email": "dealer@test.uz"}):
         await db.users.insert_one({"email":"dealer@test.uz","password_hash":hash_password("dealer123"),"name":"Test Diler","role":"dealer","phone":"+998901234567","address":"Toshkent, Yunusobod","credit_limit":5000,"debt":0,"created_at":datetime.now(timezone.utc).isoformat()})
         logger.info("Demo diler yaratildi")
-    # Demo worker
     if not await db.users.find_one({"email": "worker@test.uz"}):
         await db.users.insert_one({"email":"worker@test.uz","password_hash":hash_password("worker123"),"name":"Aziz Ishchi","role":"worker","phone":"+998901112233","specialty":"Jalyuzi o'rnatish","created_at":datetime.now(timezone.utc).isoformat()})
         logger.info("Demo ishchi yaratildi")
-    # Demo vehicle
-    if await db.vehicles.count_documents({}) == 0:
-        await db.vehicles.insert_one({"plate_number":"01A123BC","driver_name":"Bobur Haydovchi","driver_phone":"+998903334455","created_at":datetime.now(timezone.utc).isoformat()})
-        logger.info("Demo mashina yaratildi")
 
 @app.on_event("startup")
 async def startup():
@@ -363,6 +334,9 @@ async def startup():
     await db.messages.create_index([("sender_id",1),("receiver_id",1)])
     await db.orders.create_index("dealer_id")
     await db.orders.create_index("order_code")
+    # Fix old orders without order_code
+    async for o in db.orders.find({"$or": [{"order_code": {"$exists": False}}, {"order_code": ""}]}):
+        await db.orders.update_one({"_id": o["_id"]}, {"$set": {"order_code": generate_order_code()}})
     await seed_admin()
     logger.info("Server ishga tushdi!")
 

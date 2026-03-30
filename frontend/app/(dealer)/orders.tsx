@@ -26,7 +26,7 @@ export default function DealerOrders() {
     <SafeAreaView style={s.container}>
       <Text style={s.title}>Buyurtmalarim</Text>
       {loading ? (
-        <ActivityIndicator size="large" color="#fff" style={{ flex: 1 }} />
+        <ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -35,14 +35,14 @@ export default function DealerOrders() {
         >
           {orders.length === 0 ? (
             <View style={s.emptyState}>
-              <Package size={48} color="rgba(255,255,255,0.1)" />
+              <Package size={48} color="rgba(255,255,255,0.08)" />
               <Text style={s.emptyText}>Buyurtmalar yo'q</Text>
             </View>
           ) : orders.map(order => (
             <View key={order.id} style={s.orderCard} testID={`my-order-${order.id}`}>
               <View style={s.orderHeader}>
                 <View style={s.codeSection}>
-                  <Hash size={14} color="rgba(255,255,255,0.5)" />
+                  <Hash size={13} color={colors.accent} />
                   <Text style={s.codeText}>{order.order_code}</Text>
                 </View>
                 <View style={[s.statusBadge, { backgroundColor: (statusColors[order.status] || '#fff') + '18' }]}>
@@ -50,9 +50,7 @@ export default function DealerOrders() {
                   <Text style={[s.statusText, { color: statusColors[order.status] }]}>{statusLabels[order.status] || order.status}</Text>
                 </View>
               </View>
-
               <Text style={s.orderDate}>{new Date(order.created_at).toLocaleString('uz-UZ')}</Text>
-
               {/* Status tracker */}
               <View style={s.tracker}>
                 {allStatuses.map((st, i) => {
@@ -60,41 +58,35 @@ export default function DealerOrders() {
                   const active = i <= idx && order.status !== 'rad_etilgan';
                   return (
                     <View key={st} style={s.trackerStep}>
-                      <View style={[s.trackerDot, active && s.trackerDotActive]} />
-                      {i < allStatuses.length - 1 && <View style={[s.trackerLine, active && s.trackerLineActive]} />}
+                      <View style={[s.trackerDot, active && { backgroundColor: colors.accent }]} />
+                      {i < allStatuses.length - 1 && <View style={[s.trackerLine, active && { backgroundColor: colors.accent + '50' }]} />}
                     </View>
                   );
                 })}
               </View>
-
               {order.status === 'rad_etilgan' && order.rejection_reason ? (
                 <View style={s.rejectBox}><Text style={s.rejectText}>Sabab: {order.rejection_reason}</Text></View>
               ) : null}
-
-              {/* Delivery info */}
-              {order.vehicle_info && (
+              {order.delivery_info && (
                 <View style={s.deliveryCard}>
-                  <Truck size={16} color="#448AFF" />
+                  <Truck size={16} color={colors.blue} />
                   <View style={{ flex: 1 }}>
-                    <Text style={s.deliveryTitle}>Yetkazib berish</Text>
-                    <Text style={s.deliveryPlate}>{order.vehicle_info.plate_number}</Text>
-                    <Text style={s.deliveryDriver}>{order.vehicle_info.driver_name}</Text>
+                    <Text style={s.deliveryTitle}>Yetkazish</Text>
+                    <Text style={s.deliveryDriver}>{order.delivery_info.driver_name}</Text>
+                    {order.delivery_info.plate_number ? <Text style={s.deliveryPlate}>{order.delivery_info.plate_number}</Text> : null}
                   </View>
                   <View style={s.callBtn}>
-                    <Phone size={14} color="#fff" />
-                    <Text style={s.callText}>{order.vehicle_info.driver_phone}</Text>
+                    <Phone size={13} color="#fff" />
+                    <Text style={s.callText}>{order.delivery_info.driver_phone}</Text>
                   </View>
                 </View>
               )}
-
-              {/* Items */}
               {order.items?.map((item: any, i: number) => (
                 <View key={i} style={s.itemRow}>
                   <Text style={s.itemName}>{item.material_name}</Text>
                   <Text style={s.itemDetail}>{item.width}m x {item.height}m = {item.sqm} kv.m</Text>
                 </View>
               ))}
-
               <View style={s.orderFooter}>
                 <Text style={s.orderTotal}>{order.total_sqm} kv.m</Text>
                 <Text style={s.orderPrice}>{formatPrice(order.total_price)}</Text>
@@ -109,36 +101,34 @@ export default function DealerOrders() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  title: { fontSize: 28, fontWeight: '700', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -1 },
+  title: { fontSize: 26, fontWeight: '800', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
   emptyState: { alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { fontSize: 16, color: 'rgba(255,255,255,0.3)' },
-  orderCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', padding: 18, marginBottom: 14 },
+  emptyText: { fontSize: 16, color: colors.textTer },
+  orderCard: { backgroundColor: colors.card, borderRadius: 22, borderWidth: 1, borderColor: colors.cardBorder, padding: 18, marginBottom: 14 },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  codeSection: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  codeText: { fontSize: 14, fontWeight: '700', color: '#fff', letterSpacing: 1.5, fontVariant: ['tabular-nums'] },
+  codeSection: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.accentSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  codeText: { fontSize: 14, fontWeight: '800', color: colors.accent, letterSpacing: 1.5, fontVariant: ['tabular-nums'] },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, gap: 5 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  orderDate: { fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 8 },
+  orderDate: { fontSize: 12, color: colors.textTer, marginTop: 8 },
   tracker: { flexDirection: 'row', alignItems: 'center', marginVertical: 14, paddingHorizontal: 4 },
   trackerStep: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  trackerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.1)' },
-  trackerDotActive: { backgroundColor: '#fff' },
-  trackerLine: { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.06)', marginHorizontal: 2 },
-  trackerLineActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  rejectBox: { backgroundColor: 'rgba(255,82,82,0.1)', borderRadius: 12, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)' },
-  rejectText: { fontSize: 12, color: '#FF5252' },
-  deliveryCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(68,138,255,0.08)', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(68,138,255,0.15)' },
-  deliveryTitle: { fontSize: 11, color: 'rgba(68,138,255,0.7)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  deliveryPlate: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  deliveryDriver: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  trackerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.08)' },
+  trackerLine: { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.04)', marginHorizontal: 2 },
+  rejectBox: { backgroundColor: colors.dangerSoft, borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)' },
+  rejectText: { fontSize: 12, color: colors.danger },
+  deliveryCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.blueSoft, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(68,138,255,0.15)' },
+  deliveryTitle: { fontSize: 10, color: 'rgba(68,138,255,0.7)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  deliveryDriver: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  deliveryPlate: { fontSize: 12, color: colors.textSec, marginTop: 1 },
   callBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   callText: { fontSize: 11, color: '#fff' },
   itemRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
-  itemName: { fontSize: 14, fontWeight: '500', color: '#fff' },
-  itemDetail: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
-  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
-  orderTotal: { fontSize: 13, color: 'rgba(255,255,255,0.5)' },
-  orderPrice: { fontSize: 17, fontWeight: '600', color: '#fff' },
+  itemName: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  itemDetail: { fontSize: 12, color: colors.textSec, marginTop: 2 },
+  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+  orderTotal: { fontSize: 13, color: colors.textSec },
+  orderPrice: { fontSize: 18, fontWeight: '800', color: '#fff' },
 });

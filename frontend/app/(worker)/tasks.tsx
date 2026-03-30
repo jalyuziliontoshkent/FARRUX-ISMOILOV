@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { LogOut, Wrench, Check, AlertCircle } from 'lucide-react-native';
+import { LogOut, Hash, CheckCircle, Ruler, Package } from 'lucide-react-native';
 import { api } from '../_layout';
 import { colors } from '../../src/utils/theme';
 
@@ -16,7 +16,7 @@ export default function WorkerTasks() {
   const [userName, setUserName] = useState('');
   const router = useRouter();
 
-  const fetchData = useCallback(async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const data = await api('/worker/tasks');
       setTasks(data.filter((t: any) => t.worker_status !== 'completed'));
@@ -26,13 +26,11 @@ export default function WorkerTasks() {
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchTasks(); }, []);
 
   const completeTask = async (orderId: string, itemIdx: number) => {
-    try {
-      await api(`/worker/tasks/${orderId}/${itemIdx}/complete`, { method: 'PUT' });
-      fetchData();
-    } catch (e) { console.error(e); }
+    try { await api(`/worker/tasks/${orderId}/${itemIdx}/complete`, { method: 'PUT' }); fetchTasks(); }
+    catch (e) { console.error(e); }
   };
 
   const handleLogout = async () => {
@@ -40,54 +38,46 @@ export default function WorkerTasks() {
     router.replace('/');
   };
 
-  if (loading) return <SafeAreaView style={s.container}><ActivityIndicator size="large" color="#fff" style={{ flex: 1 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} /></SafeAreaView>;
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.c}>
       <View style={s.header}>
         <View>
-          <Text style={s.greeting}>Xush kelibsiz,</Text>
-          <Text style={s.userName}>{userName}</Text>
+          <Text style={s.hi}>Salom</Text>
+          <Text style={s.name}>{userName}</Text>
         </View>
         <TouchableOpacity testID="worker-logout-btn" onPress={handleLogout} style={s.logoutBtn}>
-          <LogOut size={20} color="rgba(255,255,255,0.5)" />
+          <LogOut size={20} color="rgba(255,255,255,0.4)" />
         </TouchableOpacity>
       </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#fff" />}
-        contentContainerStyle={s.scrollContent}
-      >
-        <View style={s.countRow}>
-          <Wrench size={16} color="#FFB300" />
-          <Text style={s.countText}>{tasks.length} ta vazifa kutmoqda</Text>
+      <View style={s.countRow}>
+        <View style={s.countCard}>
+          <Text style={s.countVal}>{tasks.length}</Text>
+          <Text style={s.countLabel}>Faol vazifalar</Text>
         </View>
-
+      </View>
+      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTasks(); }} tintColor="#fff" />} contentContainerStyle={s.scroll}>
         {tasks.length === 0 ? (
-          <View style={s.emptyState}>
-            <AlertCircle size={48} color="rgba(255,255,255,0.1)" />
-            <Text style={s.emptyText}>Hozircha vazifa yo'q</Text>
+          <View style={s.empty}>
+            <Package size={48} color="rgba(255,255,255,0.08)" />
+            <Text style={s.emptyText}>Hozircha vazifalar yo'q</Text>
           </View>
-        ) : tasks.map((t, i) => (
-          <View key={`${t.order_id}-${t.item_index}`} style={s.taskCard} testID={`task-${i}`}>
-            <View style={s.taskHeader}>
-              <View style={s.codeBadge}><Text style={s.codeText}>{t.order_code}</Text></View>
-              <View style={[s.statusBadge, t.worker_status === 'assigned' ? s.assignedBadge : s.inProgressBadge]}>
-                <Text style={s.statusText}>{t.worker_status === 'assigned' ? 'Yangi' : 'Jarayonda'}</Text>
-              </View>
+        ) : tasks.map((task, i) => (
+          <View key={`${task.order_id}-${task.item_index}`} style={s.taskCard} testID={`task-${i}`}>
+            <View style={s.taskHead}>
+              <View style={s.codeBadge}><Hash size={11} color={colors.accent} /><Text style={s.codeText}>{task.order_code}</Text></View>
+              <Text style={s.taskDealer}>{task.dealer_name}</Text>
             </View>
-            <Text style={s.taskMaterial}>{t.material_name}</Text>
-            <Text style={s.taskSize}>{t.width}m × {t.height}m = {t.sqm} kv.m</Text>
-            <Text style={s.taskDealer}>Diler: {t.dealer_name}</Text>
-            {t.notes ? <Text style={s.taskNotes}>Izoh: {t.notes}</Text> : null}
-            <TouchableOpacity
-              testID={`complete-task-${i}`}
-              style={s.completeBtn}
-              onPress={() => completeTask(t.order_id, t.item_index)}
-            >
-              <Check size={18} color="#000" />
-              <Text style={s.completeBtnText}>Tayyor</Text>
+            <Text style={s.materialName}>{task.material_name}</Text>
+            <View style={s.sizeRow}>
+              <Ruler size={14} color={colors.textSec} />
+              <Text style={s.sizeText}>{task.width}m x {task.height}m = {task.sqm} kv.m</Text>
+            </View>
+            {task.notes ? <Text style={s.notes}>{task.notes}</Text> : null}
+            <TouchableOpacity testID={`complete-${i}`} style={s.completeBtn} onPress={() => completeTask(task.order_id, task.item_index)}>
+              <CheckCircle size={18} color="#000" />
+              <Text style={s.completeBtnText}>Bajarildi</Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -97,28 +87,27 @@ export default function WorkerTasks() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  c: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
-  greeting: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
-  userName: { fontSize: 28, fontWeight: '700', color: '#fff', letterSpacing: -1 },
-  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  countText: { fontSize: 14, color: '#FFB300', fontWeight: '600' },
-  emptyState: { alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { fontSize: 16, color: 'rgba(255,255,255,0.3)' },
-  taskCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', padding: 18, marginBottom: 12 },
-  taskHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  codeBadge: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  codeText: { fontSize: 12, fontWeight: '700', color: '#fff', fontVariant: ['tabular-nums'], letterSpacing: 1 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  assignedBadge: { backgroundColor: 'rgba(255,179,0,0.15)' },
-  inProgressBadge: { backgroundColor: 'rgba(68,138,255,0.15)' },
-  statusText: { fontSize: 11, fontWeight: '700', color: '#FFB300', textTransform: 'uppercase' },
-  taskMaterial: { fontSize: 18, fontWeight: '600', color: '#fff' },
-  taskSize: { fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
-  taskDealer: { fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 6 },
-  taskNotes: { fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4, fontStyle: 'italic' },
-  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, backgroundColor: '#00E676', borderRadius: 24, marginTop: 14 },
+  hi: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
+  name: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
+  countRow: { paddingHorizontal: 24, marginBottom: 8 },
+  countCard: { backgroundColor: colors.accentSoft, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: 'rgba(108,99,255,0.15)' },
+  countVal: { fontSize: 32, fontWeight: '800', color: colors.accent },
+  countLabel: { fontSize: 12, color: colors.textSec, fontWeight: '600', marginTop: 2 },
+  scroll: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 100 },
+  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyText: { fontSize: 15, color: colors.textTer },
+  taskCard: { backgroundColor: colors.card, borderRadius: 22, borderWidth: 1, borderColor: colors.cardBorder, padding: 18, marginBottom: 14 },
+  taskHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  codeText: { fontSize: 12, fontWeight: '800', color: colors.accent, letterSpacing: 1, fontVariant: ['tabular-nums'] },
+  taskDealer: { fontSize: 12, color: colors.textSec },
+  materialName: { fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 8 },
+  sizeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sizeText: { fontSize: 14, color: colors.textSec },
+  notes: { fontSize: 13, color: colors.textTer, marginTop: 8, fontStyle: 'italic' },
+  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, backgroundColor: colors.success, borderRadius: 26, marginTop: 16 },
   completeBtnText: { fontSize: 15, fontWeight: '700', color: '#000' },
 });

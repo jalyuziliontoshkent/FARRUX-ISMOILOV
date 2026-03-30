@@ -58,7 +58,7 @@ export default function AdminInventory() {
       <View style={styles.header}>
         <Text style={styles.title}>Ombor</Text>
         <TouchableOpacity testID="add-material-btn" style={styles.addBtn} onPress={() => setShowAdd(true)}>
-          <Plus size={20} color="#000" />
+          <Plus size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -175,8 +175,8 @@ export default function AdminInventory() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16 },
-  title: { fontSize: 28, fontWeight: '700', color: '#fff', letterSpacing: -1 },
-  addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginTop: 16,
     backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 16, borderWidth: 1,
@@ -225,10 +225,10 @@ const styles = StyleSheet.create({
   imagePreviewEmpty: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.03)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderStyle: 'dashed' },
   catRow: { flexDirection: 'row', gap: 8 },
   catBtn: { flex: 1, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
-  catBtnActive: { backgroundColor: '#fff' },
+  catBtnActive: { backgroundColor: colors.accent },
   catBtnText: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
-  catBtnTextActive: { color: '#000' },
+  catBtnTextActive: { color: '#fff' },
   rowInputs: { flexDirection: 'row', gap: 12 },
-  saveBtn: { height: 54, backgroundColor: '#fff', borderRadius: 27, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
-  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  saveBtn: { height: 54, backgroundColor: colors.accent, borderRadius: 27, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
+  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });
