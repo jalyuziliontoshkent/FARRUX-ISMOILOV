@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Modal, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { LogOut, TrendingUp, Clock, CheckCircle, Truck, XCircle, Zap, Users, Boxes, Package, Wrench } from 'lucide-react-native';
+import { LogOut, TrendingUp, Clock, CheckCircle, Truck, XCircle, Zap, Users, Boxes, Wrench, Settings, X } from 'lucide-react-native';
 import { api } from '../_layout';
 import { colors, formatPrice } from '../../src/utils/theme';
 
@@ -15,6 +15,12 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ email: '', current_password: '', password: '' });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileMsg, setProfileMsg] = useState('');
+  const [profileErr, setProfileErr] = useState('');
   const router = useRouter();
 
   const fetchData = useCallback(async () => {
@@ -22,7 +28,11 @@ export default function AdminDashboard() {
       const data = await api('/statistics');
       setStats(data);
       const userStr = await AsyncStorage.getItem('user');
-      if (userStr) setUserName(JSON.parse(userStr).name || 'Admin');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        setUserName(u.name || 'Admin');
+        setUserEmail(u.email || '');
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -32,6 +42,30 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     await AsyncStorage.multiRemove(['token', 'user']);
     router.replace('/');
+  };
+
+  const openProfile = () => {
+    setProfileForm({ email: userEmail, current_password: '', password: '' });
+    setProfileMsg(''); setProfileErr('');
+    setShowProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!profileForm.current_password) { setProfileErr('Joriy parolni kiriting'); return; }
+    setProfileLoading(true); setProfileErr(''); setProfileMsg('');
+    try {
+      const res = await api('/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify(profileForm),
+      });
+      await AsyncStorage.setItem('token', res.token);
+      await AsyncStorage.setItem('user', JSON.stringify(res.user));
+      setUserName(res.user.name || 'Admin');
+      setUserEmail(res.user.email || '');
+      setProfileMsg('Profil yangilandi!');
+      setProfileForm({ ...profileForm, current_password: '', password: '' });
+    } catch (e: any) { setProfileErr(e.message || 'Xatolik'); }
+    finally { setProfileLoading(false); }
   };
 
   if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} /></SafeAreaView>;
@@ -50,9 +84,14 @@ export default function AdminDashboard() {
           <Text style={s.hi}>Xush kelibsiz</Text>
           <Text style={s.name}>{userName}</Text>
         </View>
-        <TouchableOpacity testID="admin-logout-btn" onPress={handleLogout} style={s.logoutBtn}>
-          <LogOut size={20} color="rgba(255,255,255,0.4)" />
-        </TouchableOpacity>
+        <View style={s.headerBtns}>
+          <TouchableOpacity testID="admin-profile-btn" onPress={openProfile} style={s.headerBtn}>
+            <Settings size={20} color="rgba(255,255,255,0.4)" />
+          </TouchableOpacity>
+          <TouchableOpacity testID="admin-logout-btn" onPress={handleLogout} style={s.headerBtn}>
+            <LogOut size={20} color="rgba(255,255,255,0.4)" />
+          </TouchableOpacity>
+        </View>
       </View>
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#fff" />} contentContainerStyle={s.scroll}>
         {/* Revenue Hero */}
@@ -94,6 +133,60 @@ export default function AdminDashboard() {
           ))}
         </View>
       </ScrollView>
+
+      {/* Profile Modal */}
+      <Modal visible={showProfile} transparent animationType="slide">
+        <View style={s.modalBg}><View style={s.modal}>
+          <View style={s.modalH}>
+            <Text style={s.modalTitle}>Profil sozlamalari</Text>
+            <TouchableOpacity testID="close-profile" onPress={() => setShowProfile(false)}>
+              <X size={22} color="rgba(255,255,255,0.4)" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={s.modalBody}>
+            {profileMsg ? <View style={s.successBox}><Text style={s.successText}>{profileMsg}</Text></View> : null}
+            {profileErr ? <View style={s.errorBox}><Text style={s.errorText}>{profileErr}</Text></View> : null}
+
+            <Text style={s.label}>Yangi Email</Text>
+            <TextInput
+              testID="profile-email"
+              style={s.modalInput}
+              value={profileForm.email}
+              onChangeText={v => setProfileForm({...profileForm, email: v})}
+              placeholder="email@..."
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+
+            <Text style={s.label}>Yangi Parol (bo'sh qoldiring o'zgarmaslik uchun)</Text>
+            <TextInput
+              testID="profile-new-password"
+              style={s.modalInput}
+              value={profileForm.password}
+              onChangeText={v => setProfileForm({...profileForm, password: v})}
+              placeholder="Yangi parol"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              secureTextEntry
+            />
+
+            <Text style={[s.label, { marginTop: 24, color: colors.warning }]}>Joriy Parol (majburiy)</Text>
+            <TextInput
+              testID="profile-current-password"
+              style={[s.modalInput, { borderColor: 'rgba(255,179,0,0.3)' }]}
+              value={profileForm.current_password}
+              onChangeText={v => setProfileForm({...profileForm, current_password: v})}
+              placeholder="Joriy parol"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              secureTextEntry
+            />
+
+            <TouchableOpacity testID="save-profile" style={s.saveBtn} onPress={saveProfile} disabled={profileLoading}>
+              {profileLoading ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Saqlash</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+        </View></View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -103,7 +196,8 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
   hi: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
   name: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
+  headerBtns: { flexDirection: 'row', gap: 8 },
+  headerBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
   scroll: { paddingHorizontal: 24, paddingBottom: 100 },
   heroWrap: { marginBottom: 20, borderRadius: 24, overflow: 'hidden' },
   hero: { padding: 28, borderRadius: 24 },
@@ -120,4 +214,17 @@ const s = StyleSheet.create({
   infoCard: { width: '48%', flexGrow: 1, backgroundColor: colors.card, borderRadius: 18, padding: 16, gap: 6, borderWidth: 1, borderColor: colors.cardBorder },
   infoVal: { fontSize: 22, fontWeight: '700', color: '#fff' },
   infoLabel: { fontSize: 11, color: colors.textSec, fontWeight: '500' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: '#0a0a0f', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', maxHeight: '80%' },
+  modalH: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 22, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  modalBody: { padding: 22, paddingBottom: 40 },
+  label: { fontSize: 11, color: colors.textSec, marginBottom: 6, marginTop: 14, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
+  modalInput: { height: 52, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 16, borderWidth: 1, borderColor: colors.cardBorder, paddingHorizontal: 18, fontSize: 15, color: '#fff' },
+  saveBtn: { height: 56, backgroundColor: colors.accent, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
+  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  successBox: { backgroundColor: colors.successSoft, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)' },
+  successText: { color: colors.success, fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  errorBox: { backgroundColor: colors.dangerSoft, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)' },
+  errorText: { color: colors.danger, fontSize: 13, textAlign: 'center' },
 });

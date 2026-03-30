@@ -83,6 +83,38 @@ async def login(req: LoginReq):
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)): return {"user": user}
 
+# ─── AUTH: Update own profile ───
+@api_router.put("/auth/profile")
+async def update_profile(request: Request, user: dict = Depends(get_current_user)):
+    body = await request.json()
+    upd = {}
+    new_email = body.get("email", "").strip().lower()
+    new_password = body.get("password", "").strip()
+    current_password = body.get("current_password", "").strip()
+    if not current_password:
+        raise HTTPException(400, "Joriy parolni kiriting")
+    # Verify current password
+    db_user = await db.users.find_one({"_id": ObjectId(user["id"])})
+    if not db_user or not verify_password(current_password, db_user["password_hash"]):
+        raise HTTPException(400, "Joriy parol noto'g'ri")
+    if new_email and new_email != db_user["email"]:
+        existing = await db.users.find_one({"email": new_email, "_id": {"$ne": ObjectId(user["id"])}})
+        if existing:
+            raise HTTPException(400, "Bu email allaqachon mavjud")
+        upd["email"] = new_email
+    if new_password:
+        if len(new_password) < 4:
+            raise HTTPException(400, "Parol kamida 4 ta belgi")
+        upd["password_hash"] = hash_password(new_password)
+    if not upd:
+        raise HTTPException(400, "O'zgartirish yo'q")
+    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": upd})
+    updated = await db.users.find_one({"_id": ObjectId(user["id"])}, {"password_hash": 0})
+    updated["id"] = str(updated["_id"]); del updated["_id"]
+    # Generate new token with updated email
+    token = create_access_token(updated["id"], updated.get("email",""), updated.get("role",""))
+    return {"user": updated, "token": token, "message": "Profil yangilandi"}
+
 # ─── DEALERS ───
 @api_router.post("/dealers")
 async def create_dealer(d: DealerCreate, admin: dict = Depends(require_admin)):
