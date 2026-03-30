@@ -8,10 +8,8 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadF
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
-import aiofiles, uuid
-from motor.motor_asyncio import AsyncIOMotorClient
-from bson import ObjectId
-import os, logging, bcrypt, jwt, secrets, string
+import asyncpg, aiofiles, uuid
+import os, logging, bcrypt, jwt, secrets, string, json
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
@@ -19,9 +17,7 @@ from typing import List, Optional
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+DATABASE_URL = os.environ['DATABASE_URL']
 
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -31,6 +27,16 @@ app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads"
 api_router = APIRouter(prefix="/api")
 JWT_ALGORITHM = "HS256"
 
+# ─── DB Pool ───
+pool: asyncpg.Pool = None
+
+async def get_pool() -> asyncpg.Pool:
+    global pool
+    if pool is None:
+        pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    return pool
+
+# ─── Helpers ───
 def get_jwt_secret(): return os.environ["JWT_SECRET"]
 def hash_password(pw: str) -> str: return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 def verify_password(plain: str, hashed: str) -> bool: return bcrypt.checkpw(plain.encode(), hashed.encode())
@@ -41,14 +47,22 @@ def create_access_token(uid: str, email: str, role: str) -> str:
 def generate_order_code():
     return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
 
+def row_to_dict(row):
+    if row is None:
+        return None
+    return dict(row)
+
 async def get_current_user(request: Request) -> dict:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "): raise HTTPException(401, "Not authenticated")
     try:
         p = jwt.decode(auth[7:], get_jwt_secret(), algorithms=[JWT_ALGORITHM])
-        user = await db.users.find_one({"_id": ObjectId(p["sub"])})
-        if not user: raise HTTPException(401, "User not found")
-        user["id"] = str(user["_id"]); del user["_id"]; user.pop("password_hash", None)
+        db = await get_pool()
+        row = await db.fetchrow("SELECT * FROM users WHERE id = $1", int(p["sub"]))
+        if not row: raise HTTPException(401, "User not found")
+        user = row_to_dict(row)
+        user["id"] = str(user["id"])
+        user.pop("password_hash", None)
         return user
     except jwt.ExpiredSignatureError: raise HTTPException(401, "Token expired")
     except jwt.InvalidTokenError: raise HTTPException(401, "Invalid token")
@@ -80,11 +94,15 @@ class DeliveryInfoReq(BaseModel): driver_name: str; driver_phone: str; plate_num
 # ─── AUTH ───
 @api_router.post("/auth/login")
 async def login(req: LoginReq):
-    user = await db.users.find_one({"email": req.email.strip().lower()})
+    db = await get_pool()
+    user = await db.fetchrow("SELECT * FROM users WHERE email = $1", req.email.strip().lower())
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Email yoki parol noto'g'ri")
-    token = create_access_token(str(user["_id"]), user["email"], user["role"])
-    return {"token": token, "user": {"id": str(user["_id"]), "name": user.get("name",""), "email": user["email"], "role": user["role"], "phone": user.get("phone",""), "address": user.get("address",""), "credit_limit": user.get("credit_limit",0), "debt": user.get("debt",0), "specialty": user.get("specialty","")}}
+    token = create_access_token(str(user["id"]), user["email"], user["role"])
+    u = row_to_dict(user)
+    u["id"] = str(u["id"])
+    u.pop("password_hash", None)
+    return {"token": token, "user": u}
 
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)): return {"user": user}
@@ -93,108 +111,189 @@ async def get_me(user: dict = Depends(get_current_user)): return {"user": user}
 @api_router.put("/auth/profile")
 async def update_profile(request: Request, user: dict = Depends(get_current_user)):
     body = await request.json()
-    upd = {}
     new_email = body.get("email", "").strip().lower()
     new_password = body.get("password", "").strip()
     current_password = body.get("current_password", "").strip()
     if not current_password:
         raise HTTPException(400, "Joriy parolni kiriting")
-    # Verify current password
-    db_user = await db.users.find_one({"_id": ObjectId(user["id"])})
+    db = await get_pool()
+    db_user = await db.fetchrow("SELECT * FROM users WHERE id = $1", int(user["id"]))
     if not db_user or not verify_password(current_password, db_user["password_hash"]):
         raise HTTPException(400, "Joriy parol noto'g'ri")
+    updates = []
+    params = []
+    param_idx = 1
     if new_email and new_email != db_user["email"]:
-        existing = await db.users.find_one({"email": new_email, "_id": {"$ne": ObjectId(user["id"])}})
+        existing = await db.fetchrow("SELECT id FROM users WHERE email = $1 AND id != $2", new_email, int(user["id"]))
         if existing:
             raise HTTPException(400, "Bu email allaqachon mavjud")
-        upd["email"] = new_email
+        updates.append(f"email = ${param_idx}")
+        params.append(new_email)
+        param_idx += 1
     if new_password:
         if len(new_password) < 4:
             raise HTTPException(400, "Parol kamida 4 ta belgi")
-        upd["password_hash"] = hash_password(new_password)
-    if not upd:
+        updates.append(f"password_hash = ${param_idx}")
+        params.append(hash_password(new_password))
+        param_idx += 1
+    if not updates:
         raise HTTPException(400, "O'zgartirish yo'q")
-    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": upd})
-    updated = await db.users.find_one({"_id": ObjectId(user["id"])}, {"password_hash": 0})
-    updated["id"] = str(updated["_id"]); del updated["_id"]
-    # Generate new token with updated email
-    token = create_access_token(updated["id"], updated.get("email",""), updated.get("role",""))
-    return {"user": updated, "token": token, "message": "Profil yangilandi"}
+    params.append(int(user["id"]))
+    await db.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ${param_idx}", *params)
+    updated = await db.fetchrow("SELECT * FROM users WHERE id = $1", int(user["id"]))
+    u = row_to_dict(updated)
+    u["id"] = str(u["id"])
+    u.pop("password_hash", None)
+    token = create_access_token(u["id"], u.get("email", ""), u.get("role", ""))
+    return {"user": u, "token": token, "message": "Profil yangilandi"}
 
 # ─── DEALERS ───
 @api_router.post("/dealers")
 async def create_dealer(d: DealerCreate, admin: dict = Depends(require_admin)):
-    if await db.users.find_one({"email": d.email.strip().lower()}): raise HTTPException(400, "Email mavjud")
-    doc = {"name": d.name, "email": d.email.strip().lower(), "password_hash": hash_password(d.password), "role": "dealer", "phone": d.phone, "address": d.address, "credit_limit": d.credit_limit, "debt": 0, "created_at": datetime.now(timezone.utc).isoformat()}
-    r = await db.users.insert_one(doc); doc["id"] = str(r.inserted_id); doc.pop("_id", None); doc.pop("password_hash", None); return doc
+    db = await get_pool()
+    existing = await db.fetchrow("SELECT id FROM users WHERE email = $1", d.email.strip().lower())
+    if existing: raise HTTPException(400, "Email mavjud")
+    now = datetime.now(timezone.utc).isoformat()
+    row = await db.fetchrow(
+        "INSERT INTO users (name, email, password_hash, role, phone, address, credit_limit, debt, specialty, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,0,'',$8) RETURNING *",
+        d.name, d.email.strip().lower(), hash_password(d.password), "dealer", d.phone, d.address, d.credit_limit, now
+    )
+    u = row_to_dict(row)
+    u["id"] = str(u["id"])
+    u.pop("password_hash", None)
+    return u
 
 @api_router.get("/dealers")
 async def list_dealers(admin: dict = Depends(require_admin)):
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM users WHERE role = 'dealer' ORDER BY created_at DESC")
     out = []
-    async for d in db.users.find({"role": "dealer"}, {"password_hash": 0}): d["id"] = str(d["_id"]); del d["_id"]; out.append(d)
+    for r in rows:
+        u = row_to_dict(r)
+        u["id"] = str(u["id"])
+        u.pop("password_hash", None)
+        out.append(u)
     return out
 
 @api_router.put("/dealers/{did}")
 async def update_dealer(did: str, data: DealerUpdate, admin: dict = Depends(require_admin)):
-    upd = {k: v for k, v in data.dict().items() if v is not None}
-    if not upd: raise HTTPException(400, "No data")
-    await db.users.update_one({"_id": ObjectId(did)}, {"$set": upd})
-    d = await db.users.find_one({"_id": ObjectId(did)}, {"password_hash": 0}); d["id"] = str(d["_id"]); del d["_id"]; return d
+    db = await get_pool()
+    updates = []
+    params = []
+    idx = 1
+    for field in ["name", "phone", "address", "credit_limit"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            updates.append(f"{field} = ${idx}")
+            params.append(val)
+            idx += 1
+    if not updates: raise HTTPException(400, "No data")
+    params.append(int(did))
+    await db.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ${idx}", *params)
+    row = await db.fetchrow("SELECT * FROM users WHERE id = $1", int(did))
+    u = row_to_dict(row)
+    u["id"] = str(u["id"])
+    u.pop("password_hash", None)
+    return u
 
 @api_router.delete("/dealers/{did}")
 async def delete_dealer(did: str, admin: dict = Depends(require_admin)):
-    r = await db.users.delete_one({"_id": ObjectId(did), "role": "dealer"})
-    if r.deleted_count == 0: raise HTTPException(404, "Not found")
+    db = await get_pool()
+    result = await db.execute("DELETE FROM users WHERE id = $1 AND role = 'dealer'", int(did))
+    if result == "DELETE 0": raise HTTPException(404, "Not found")
     return {"message": "Deleted"}
 
 # ─── WORKERS ───
 @api_router.post("/workers")
 async def create_worker(w: WorkerCreate, admin: dict = Depends(require_admin)):
-    if await db.users.find_one({"email": w.email.strip().lower()}): raise HTTPException(400, "Email mavjud")
-    doc = {"name": w.name, "email": w.email.strip().lower(), "password_hash": hash_password(w.password), "role": "worker", "phone": w.phone, "specialty": w.specialty, "created_at": datetime.now(timezone.utc).isoformat()}
-    r = await db.users.insert_one(doc); doc["id"] = str(r.inserted_id); doc.pop("_id", None); doc.pop("password_hash", None); return doc
+    db = await get_pool()
+    existing = await db.fetchrow("SELECT id FROM users WHERE email = $1", w.email.strip().lower())
+    if existing: raise HTTPException(400, "Email mavjud")
+    now = datetime.now(timezone.utc).isoformat()
+    row = await db.fetchrow(
+        "INSERT INTO users (name, email, password_hash, role, phone, address, credit_limit, debt, specialty, created_at) VALUES ($1,$2,$3,$4,$5,'',$6,0,$7,$8) RETURNING *",
+        w.name, w.email.strip().lower(), hash_password(w.password), "worker", w.phone, 0, w.specialty, now
+    )
+    u = row_to_dict(row)
+    u["id"] = str(u["id"])
+    u.pop("password_hash", None)
+    return u
 
 @api_router.get("/workers")
 async def list_workers(admin: dict = Depends(require_admin)):
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM users WHERE role = 'worker' ORDER BY created_at DESC")
     out = []
-    async for w in db.users.find({"role": "worker"}, {"password_hash": 0}): w["id"] = str(w["_id"]); del w["_id"]; out.append(w)
+    for r in rows:
+        u = row_to_dict(r)
+        u["id"] = str(u["id"])
+        u.pop("password_hash", None)
+        out.append(u)
     return out
 
 @api_router.delete("/workers/{wid}")
 async def delete_worker(wid: str, admin: dict = Depends(require_admin)):
-    r = await db.users.delete_one({"_id": ObjectId(wid), "role": "worker"})
-    if r.deleted_count == 0: raise HTTPException(404, "Not found")
+    db = await get_pool()
+    result = await db.execute("DELETE FROM users WHERE id = $1 AND role = 'worker'", int(wid))
+    if result == "DELETE 0": raise HTTPException(404, "Not found")
     return {"message": "Deleted"}
 
 # ─── MATERIALS ───
 @api_router.post("/materials")
 async def create_material(d: MaterialCreate, admin: dict = Depends(require_admin)):
-    doc = d.dict(); doc["created_at"] = datetime.now(timezone.utc).isoformat()
-    r = await db.materials.insert_one(doc); doc["id"] = str(r.inserted_id); doc.pop("_id", None); return doc
+    db = await get_pool()
+    now = datetime.now(timezone.utc).isoformat()
+    row = await db.fetchrow(
+        "INSERT INTO materials (name, category, price_per_sqm, stock_quantity, unit, description, image_url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+        d.name, d.category, d.price_per_sqm, d.stock_quantity, d.unit, d.description, d.image_url, now
+    )
+    m = row_to_dict(row)
+    m["id"] = str(m["id"])
+    return m
 
 @api_router.get("/materials")
 async def list_materials(user: dict = Depends(get_current_user)):
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM materials ORDER BY created_at DESC")
     out = []
-    async for m in db.materials.find(): m["id"] = str(m["_id"]); del m["_id"]; out.append(m)
+    for r in rows:
+        m = row_to_dict(r)
+        m["id"] = str(m["id"])
+        out.append(m)
     return out
 
 @api_router.put("/materials/{mid}")
 async def update_material(mid: str, d: MaterialUpdate, admin: dict = Depends(require_admin)):
-    upd = {k: v for k, v in d.dict().items() if v is not None}
-    if not upd: raise HTTPException(400, "No data")
-    await db.materials.update_one({"_id": ObjectId(mid)}, {"$set": upd})
-    m = await db.materials.find_one({"_id": ObjectId(mid)}); m["id"] = str(m["_id"]); del m["_id"]; return m
+    db = await get_pool()
+    updates = []
+    params = []
+    idx = 1
+    for field in ["name", "category", "price_per_sqm", "stock_quantity", "description", "image_url"]:
+        val = getattr(d, field, None)
+        if val is not None:
+            updates.append(f"{field} = ${idx}")
+            params.append(val)
+            idx += 1
+    if not updates: raise HTTPException(400, "No data")
+    params.append(int(mid))
+    await db.execute(f"UPDATE materials SET {', '.join(updates)} WHERE id = ${idx}", *params)
+    row = await db.fetchrow("SELECT * FROM materials WHERE id = $1", int(mid))
+    m = row_to_dict(row)
+    m["id"] = str(m["id"])
+    return m
 
 @api_router.delete("/materials/{mid}")
 async def delete_material(mid: str, admin: dict = Depends(require_admin)):
-    r = await db.materials.delete_one({"_id": ObjectId(mid)})
-    if r.deleted_count == 0: raise HTTPException(404, "Not found")
+    db = await get_pool()
+    result = await db.execute("DELETE FROM materials WHERE id = $1", int(mid))
+    if result == "DELETE 0": raise HTTPException(404, "Not found")
     return {"message": "Deleted"}
 
 # ─── ORDERS ───
 @api_router.post("/orders")
 async def create_order(data: OrderCreate, user: dict = Depends(get_current_user)):
     if user.get("role") != "dealer": raise HTTPException(403, "Faqat dilerlar")
+    db = await get_pool()
     items = []; total_price = 0; total_sqm = 0
     for it in data.items:
         sqm = it.width * it.height * it.quantity
@@ -202,122 +301,234 @@ async def create_order(data: OrderCreate, user: dict = Depends(get_current_user)
         total_sqm += sqm; total_price += price
         items.append({"material_id": it.material_id, "material_name": it.material_name, "width": it.width, "height": it.height, "quantity": it.quantity, "sqm": round(sqm, 2), "price_per_sqm": it.price_per_sqm, "price": round(price, 2), "notes": it.notes, "assigned_worker_id": "", "assigned_worker_name": "", "worker_status": "pending"})
     order_code = generate_order_code()
-    order = {"order_code": order_code, "dealer_id": user["id"], "dealer_name": user.get("name",""), "items": items, "total_sqm": round(total_sqm,2), "total_price": round(total_price,2), "status": "kutilmoqda", "notes": data.notes, "rejection_reason": "", "delivery_info": None, "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}
-    r = await db.orders.insert_one(order); order["id"] = str(r.inserted_id); order.pop("_id", None)
-    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$inc": {"debt": total_price}})
-    return order
+    now = datetime.now(timezone.utc).isoformat()
+    row = await db.fetchrow(
+        "INSERT INTO orders (order_code, dealer_id, dealer_name, items, total_sqm, total_price, status, notes, rejection_reason, delivery_info, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
+        order_code, int(user["id"]), user.get("name", ""), json.dumps(items), round(total_sqm, 2), round(total_price, 2), "kutilmoqda", data.notes, "", None, now, now
+    )
+    o = row_to_dict(row)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    await db.execute("UPDATE users SET debt = debt + $1 WHERE id = $2", total_price, int(user["id"]))
+    return o
 
 @api_router.get("/orders")
 async def list_orders(user: dict = Depends(get_current_user)):
-    q = {}
-    if user.get("role") == "dealer": q["dealer_id"] = user["id"]
+    db = await get_pool()
+    if user.get("role") == "dealer":
+        rows = await db.fetch("SELECT * FROM orders WHERE dealer_id = $1 ORDER BY created_at DESC", int(user["id"]))
+    else:
+        rows = await db.fetch("SELECT * FROM orders ORDER BY created_at DESC")
     out = []
-    async for o in db.orders.find(q).sort("created_at", -1): o["id"] = str(o["_id"]); del o["_id"]; out.append(o)
+    for r in rows:
+        o = row_to_dict(r)
+        o["id"] = str(o["id"])
+        o["dealer_id"] = str(o["dealer_id"])
+        o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+        o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+        out.append(o)
     return out
 
 @api_router.get("/orders/{oid}")
 async def get_order(oid: str, user: dict = Depends(get_current_user)):
-    o = await db.orders.find_one({"_id": ObjectId(oid)})
+    db = await get_pool()
+    o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
     if not o: raise HTTPException(404, "Not found")
-    if user.get("role") == "dealer" and o["dealer_id"] != user["id"]: raise HTTPException(403)
-    o["id"] = str(o["_id"]); del o["_id"]; return o
+    o = row_to_dict(o)
+    if user.get("role") == "dealer" and str(o["dealer_id"]) != user["id"]: raise HTTPException(403)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    return o
 
 @api_router.put("/orders/{oid}/status")
 async def update_order_status(oid: str, data: OrderStatusUpdate, admin: dict = Depends(require_admin)):
     valid = ["kutilmoqda","tasdiqlangan","tayyorlanmoqda","tayyor","yetkazilmoqda","yetkazildi","rad_etilgan"]
-    if data.status not in valid: raise HTTPException(400, f"Invalid status")
-    upd = {"status": data.status, "updated_at": datetime.now(timezone.utc).isoformat()}
-    if data.status == "rad_etilgan" and data.rejection_reason: upd["rejection_reason"] = data.rejection_reason
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": upd})
-    o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
+    if data.status not in valid: raise HTTPException(400, "Invalid status")
+    db = await get_pool()
+    now = datetime.now(timezone.utc).isoformat()
+    if data.status == "rad_etilgan" and data.rejection_reason:
+        await db.execute("UPDATE orders SET status = $1, rejection_reason = $2, updated_at = $3 WHERE id = $4", data.status, data.rejection_reason, now, int(oid))
+    else:
+        await db.execute("UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3", data.status, now, int(oid))
+    o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
+    o = row_to_dict(o)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    return o
 
 # ─── WORKER: Assign item to worker ───
 @api_router.put("/orders/{oid}/items/{item_idx}/assign")
 async def assign_item_to_worker(oid: str, item_idx: int, data: AssignItemReq, admin: dict = Depends(require_admin)):
-    order = await db.orders.find_one({"_id": ObjectId(oid)})
+    db = await get_pool()
+    order = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
     if not order: raise HTTPException(404, "Order not found")
-    if item_idx >= len(order["items"]): raise HTTPException(400, "Invalid item index")
-    worker = await db.users.find_one({"_id": ObjectId(data.worker_id), "role": "worker"}, {"password_hash": 0})
+    items = json.loads(order["items"]) if isinstance(order["items"], str) else order["items"]
+    if item_idx >= len(items): raise HTTPException(400, "Invalid item index")
+    worker = await db.fetchrow("SELECT * FROM users WHERE id = $1 AND role = 'worker'", int(data.worker_id))
     if not worker: raise HTTPException(404, "Worker not found")
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {f"items.{item_idx}.assigned_worker_id": data.worker_id, f"items.{item_idx}.assigned_worker_name": worker["name"], f"items.{item_idx}.worker_status": "assigned"}})
-    o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
+    items[item_idx]["assigned_worker_id"] = data.worker_id
+    items[item_idx]["assigned_worker_name"] = worker["name"]
+    items[item_idx]["worker_status"] = "assigned"
+    await db.execute("UPDATE orders SET items = $1 WHERE id = $2", json.dumps(items), int(oid))
+    o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
+    o = row_to_dict(o)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    return o
 
 # ─── WORKER: Get my assigned items ───
 @api_router.get("/worker/tasks")
 async def get_worker_tasks(user: dict = Depends(get_current_user)):
     if user.get("role") != "worker": raise HTTPException(403)
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM orders WHERE status IN ('tasdiqlangan','tayyorlanmoqda')")
     tasks = []
-    async for o in db.orders.find({"status": {"$in": ["tasdiqlangan","tayyorlanmoqda"]}}):
-        for idx, item in enumerate(o.get("items", [])):
+    for r in rows:
+        o = row_to_dict(r)
+        items = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+        for idx, item in enumerate(items):
             if item.get("assigned_worker_id") == user["id"]:
-                tasks.append({"order_id": str(o["_id"]), "order_code": o.get("order_code",""), "dealer_name": o.get("dealer_name",""), "item_index": idx, "material_name": item["material_name"], "width": item["width"], "height": item["height"], "sqm": item["sqm"], "notes": item.get("notes",""), "worker_status": item.get("worker_status","assigned"), "created_at": o["created_at"]})
+                tasks.append({"order_id": str(o["id"]), "order_code": o.get("order_code", ""), "dealer_name": o.get("dealer_name", ""), "item_index": idx, "material_name": item["material_name"], "width": item["width"], "height": item["height"], "sqm": item["sqm"], "notes": item.get("notes", ""), "worker_status": item.get("worker_status", "assigned"), "created_at": o["created_at"]})
     return tasks
 
 # ─── WORKER: Mark item as completed ───
 @api_router.put("/worker/tasks/{oid}/{item_idx}/complete")
 async def complete_worker_task(oid: str, item_idx: int, user: dict = Depends(get_current_user)):
     if user.get("role") != "worker": raise HTTPException(403)
-    order = await db.orders.find_one({"_id": ObjectId(oid)})
+    db = await get_pool()
+    order = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
     if not order: raise HTTPException(404)
-    if item_idx >= len(order["items"]): raise HTTPException(400)
-    if order["items"][item_idx].get("assigned_worker_id") != user["id"]: raise HTTPException(403, "Not your task")
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {f"items.{item_idx}.worker_status": "completed", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    order = await db.orders.find_one({"_id": ObjectId(oid)})
-    all_done = all(it.get("worker_status") == "completed" for it in order["items"] if it.get("assigned_worker_id"))
+    items = json.loads(order["items"]) if isinstance(order["items"], str) else order["items"]
+    if item_idx >= len(items): raise HTTPException(400)
+    if items[item_idx].get("assigned_worker_id") != user["id"]: raise HTTPException(403, "Not your task")
+    items[item_idx]["worker_status"] = "completed"
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute("UPDATE orders SET items = $1, updated_at = $2 WHERE id = $3", json.dumps(items), now, int(oid))
+    all_done = all(it.get("worker_status") == "completed" for it in items if it.get("assigned_worker_id"))
     if all_done:
-        await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": "tayyor", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
+        await db.execute("UPDATE orders SET status = 'tayyor', updated_at = $1 WHERE id = $2", now, int(oid))
+    o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
+    o = row_to_dict(o)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    return o
 
 # ─── DELIVERY: Assign delivery info directly to order ───
 @api_router.put("/orders/{oid}/delivery")
 async def assign_delivery(oid: str, data: DeliveryInfoReq, admin: dict = Depends(require_admin)):
-    order = await db.orders.find_one({"_id": ObjectId(oid)})
+    db = await get_pool()
+    order = await db.fetchrow("SELECT id FROM orders WHERE id = $1", int(oid))
     if not order: raise HTTPException(404, "Buyurtma topilmadi")
-    d_info = {"driver_name": data.driver_name, "driver_phone": data.driver_phone, "plate_number": data.plate_number}
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"delivery_info": d_info, "status": "yetkazilmoqda", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
+    d_info = json.dumps({"driver_name": data.driver_name, "driver_phone": data.driver_phone, "plate_number": data.plate_number})
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute("UPDATE orders SET delivery_info = $1, status = 'yetkazilmoqda', updated_at = $2 WHERE id = $3", d_info, now, int(oid))
+    o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
+    o = row_to_dict(o)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    return o
 
 # ─── DELIVERY: Admin confirms delivery ───
 @api_router.put("/orders/{oid}/confirm-delivery")
 async def confirm_delivery(oid: str, admin: dict = Depends(require_admin)):
-    order = await db.orders.find_one({"_id": ObjectId(oid)})
+    db = await get_pool()
+    order = await db.fetchrow("SELECT id FROM orders WHERE id = $1", int(oid))
     if not order: raise HTTPException(404, "Buyurtma topilmadi")
-    await db.orders.update_one({"_id": ObjectId(oid)}, {"$set": {"status": "yetkazildi", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    o = await db.orders.find_one({"_id": ObjectId(oid)}); o["id"] = str(o["_id"]); del o["_id"]; return o
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute("UPDATE orders SET status = 'yetkazildi', updated_at = $1 WHERE id = $2", now, int(oid))
+    o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
+    o = row_to_dict(o)
+    o["id"] = str(o["id"])
+    o["dealer_id"] = str(o["dealer_id"])
+    o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
+    o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    return o
 
 # ─── CHAT ───
 @api_router.post("/messages")
 async def send_message(data: MessageCreate, user: dict = Depends(get_current_user)):
-    msg = {"sender_id": user["id"], "sender_name": user.get("name",""), "sender_role": user.get("role",""), "receiver_id": data.receiver_id, "text": data.text, "read": False, "created_at": datetime.now(timezone.utc).isoformat()}
-    r = await db.messages.insert_one(msg); msg["id"] = str(r.inserted_id); msg.pop("_id", None); return msg
+    db = await get_pool()
+    now = datetime.now(timezone.utc).isoformat()
+    row = await db.fetchrow(
+        "INSERT INTO messages (sender_id, sender_name, sender_role, receiver_id, text, read, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        int(user["id"]), user.get("name", ""), user.get("role", ""), int(data.receiver_id), data.text, False, now
+    )
+    m = row_to_dict(row)
+    m["id"] = str(m["id"])
+    m["sender_id"] = str(m["sender_id"])
+    m["receiver_id"] = str(m["receiver_id"])
+    return m
 
 @api_router.get("/messages/{pid}")
 async def get_messages(pid: str, user: dict = Depends(get_current_user)):
-    q = {"$or": [{"sender_id": user["id"], "receiver_id": pid}, {"sender_id": pid, "receiver_id": user["id"]}]}
+    db = await get_pool()
+    rows = await db.fetch(
+        "SELECT * FROM messages WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1) ORDER BY created_at ASC",
+        int(user["id"]), int(pid)
+    )
     out = []
-    async for m in db.messages.find(q).sort("created_at", 1): m["id"] = str(m["_id"]); del m["_id"]; out.append(m)
-    await db.messages.update_many({"sender_id": pid, "receiver_id": user["id"], "read": False}, {"$set": {"read": True}})
+    for r in rows:
+        m = row_to_dict(r)
+        m["id"] = str(m["id"])
+        m["sender_id"] = str(m["sender_id"])
+        m["receiver_id"] = str(m["receiver_id"])
+        out.append(m)
+    await db.execute("UPDATE messages SET read = TRUE WHERE sender_id = $1 AND receiver_id = $2 AND read = FALSE", int(pid), int(user["id"]))
     return out
 
 @api_router.get("/chat/partners")
 async def get_chat_partners(user: dict = Depends(get_current_user)):
+    db = await get_pool()
     if user.get("role") == "admin":
+        rows = await db.fetch("SELECT * FROM users WHERE role = 'dealer' ORDER BY name")
         out = []
-        async for d in db.users.find({"role": {"$in": ["dealer"]}}, {"password_hash": 0}):
-            d["id"] = str(d["_id"]); del d["_id"]
-            lm = await db.messages.find_one({"$or": [{"sender_id": user["id"], "receiver_id": d["id"]}, {"sender_id": d["id"], "receiver_id": user["id"]}]}, sort=[("created_at", -1)])
-            uc = await db.messages.count_documents({"sender_id": d["id"], "receiver_id": user["id"], "read": False})
-            d["last_message"] = lm.get("text","") if lm else ""; d["last_message_time"] = lm.get("created_at","") if lm else ""; d["unread_count"] = uc
+        for r in rows:
+            d = row_to_dict(r)
+            d["id"] = str(d["id"])
+            d.pop("password_hash", None)
+            lm = await db.fetchrow(
+                "SELECT text, created_at FROM messages WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1) ORDER BY created_at DESC LIMIT 1",
+                int(user["id"]), r["id"]
+            )
+            uc = await db.fetchval(
+                "SELECT COUNT(*) FROM messages WHERE sender_id = $1 AND receiver_id = $2 AND read = FALSE",
+                r["id"], int(user["id"])
+            )
+            d["last_message"] = lm["text"] if lm else ""
+            d["last_message_time"] = lm["created_at"] if lm else ""
+            d["unread_count"] = uc or 0
             out.append(d)
         return out
     else:
-        admin = await db.users.find_one({"role": "admin"}, {"password_hash": 0})
+        admin = await db.fetchrow("SELECT * FROM users WHERE role = 'admin' LIMIT 1")
         if not admin: return []
-        admin["id"] = str(admin["_id"]); del admin["_id"]
-        lm = await db.messages.find_one({"$or": [{"sender_id": user["id"], "receiver_id": admin["id"]}, {"sender_id": admin["id"], "receiver_id": user["id"]}]}, sort=[("created_at", -1)])
-        uc = await db.messages.count_documents({"sender_id": admin["id"], "receiver_id": user["id"], "read": False})
-        admin["last_message"] = lm.get("text","") if lm else ""; admin["last_message_time"] = lm.get("created_at","") if lm else ""; admin["unread_count"] = uc
-        return [admin]
+        a = row_to_dict(admin)
+        a["id"] = str(a["id"])
+        a.pop("password_hash", None)
+        lm = await db.fetchrow(
+            "SELECT text, created_at FROM messages WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1) ORDER BY created_at DESC LIMIT 1",
+            int(user["id"]), admin["id"]
+        )
+        uc = await db.fetchval(
+            "SELECT COUNT(*) FROM messages WHERE sender_id = $1 AND receiver_id = $2 AND read = FALSE",
+            admin["id"], int(user["id"])
+        )
+        a["last_message"] = lm["text"] if lm else ""
+        a["last_message_time"] = lm["created_at"] if lm else ""
+        a["unread_count"] = uc or 0
+        return [a]
 
 # ─── IMAGE UPLOAD ───
 @api_router.post("/upload-image")
@@ -336,64 +547,142 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(requir
 # ─── STATISTICS ───
 @api_router.get("/statistics")
 async def get_statistics(admin: dict = Depends(require_admin)):
-    pipe = [{"$match": {"status": {"$in": ["tasdiqlangan","tayyorlanmoqda","tayyor","yetkazilmoqda","yetkazildi"]}}}, {"$group": {"_id": None, "total": {"$sum": "$total_price"}}}]
-    res = await db.orders.aggregate(pipe).to_list(1)
+    db = await get_pool()
+    total_revenue = await db.fetchval("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status IN ('tasdiqlangan','tayyorlanmoqda','tayyor','yetkazilmoqda','yetkazildi')")
     return {
-        "total_orders": await db.orders.count_documents({}),
-        "pending_orders": await db.orders.count_documents({"status": "kutilmoqda"}),
-        "approved_orders": await db.orders.count_documents({"status": "tasdiqlangan"}),
-        "preparing_orders": await db.orders.count_documents({"status": "tayyorlanmoqda"}),
-        "ready_orders": await db.orders.count_documents({"status": "tayyor"}),
-        "delivering_orders": await db.orders.count_documents({"status": "yetkazilmoqda"}),
-        "delivered_orders": await db.orders.count_documents({"status": "yetkazildi"}),
-        "rejected_orders": await db.orders.count_documents({"status": "rad_etilgan"}),
-        "total_dealers": await db.users.count_documents({"role": "dealer"}),
-        "total_workers": await db.users.count_documents({"role": "worker"}),
-        "total_materials": await db.materials.count_documents({}),
-        "total_revenue": round(res[0]["total"],2) if res else 0,
+        "total_orders": await db.fetchval("SELECT COUNT(*) FROM orders"),
+        "pending_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'kutilmoqda'"),
+        "approved_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'tasdiqlangan'"),
+        "preparing_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'tayyorlanmoqda'"),
+        "ready_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'tayyor'"),
+        "delivering_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'yetkazilmoqda'"),
+        "delivered_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'yetkazildi'"),
+        "rejected_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'rad_etilgan'"),
+        "total_dealers": await db.fetchval("SELECT COUNT(*) FROM users WHERE role = 'dealer'"),
+        "total_workers": await db.fetchval("SELECT COUNT(*) FROM users WHERE role = 'worker'"),
+        "total_materials": await db.fetchval("SELECT COUNT(*) FROM materials"),
+        "total_revenue": round(float(total_revenue), 2),
     }
 
-# ─── SEED ───
-async def seed_admin():
-    email = os.environ.get("ADMIN_EMAIL","admin@curtain.uz")
-    pw = os.environ.get("ADMIN_PASSWORD","admin123")
-    ex = await db.users.find_one({"email": email})
+# ─── SEED & STARTUP ───
+async def create_tables(db):
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'dealer',
+            phone TEXT DEFAULT '',
+            address TEXT DEFAULT '',
+            credit_limit FLOAT DEFAULT 0,
+            debt FLOAT DEFAULT 0,
+            specialty TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS materials (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT '',
+            price_per_sqm FLOAT NOT NULL DEFAULT 0,
+            stock_quantity FLOAT NOT NULL DEFAULT 0,
+            unit TEXT DEFAULT 'kv.m',
+            description TEXT DEFAULT '',
+            image_url TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY,
+            order_code TEXT DEFAULT '',
+            dealer_id INTEGER REFERENCES users(id),
+            dealer_name TEXT DEFAULT '',
+            items TEXT DEFAULT '[]',
+            total_sqm FLOAT DEFAULT 0,
+            total_price FLOAT DEFAULT 0,
+            status TEXT DEFAULT 'kutilmoqda',
+            notes TEXT DEFAULT '',
+            rejection_reason TEXT DEFAULT '',
+            delivery_info TEXT,
+            created_at TEXT DEFAULT '',
+            updated_at TEXT DEFAULT ''
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            sender_id INTEGER REFERENCES users(id),
+            sender_name TEXT DEFAULT '',
+            sender_role TEXT DEFAULT '',
+            receiver_id INTEGER REFERENCES users(id),
+            text TEXT DEFAULT '',
+            read BOOLEAN DEFAULT FALSE,
+            created_at TEXT DEFAULT ''
+        )
+    """)
+
+async def seed_admin(db):
+    email = os.environ.get("ADMIN_EMAIL", "admin@curtain.uz")
+    pw = os.environ.get("ADMIN_PASSWORD", "admin123")
+    now = datetime.now(timezone.utc).isoformat()
+    ex = await db.fetchrow("SELECT * FROM users WHERE email = $1", email)
     if not ex:
-        await db.users.insert_one({"email": email, "password_hash": hash_password(pw), "name": "Admin", "role": "admin", "created_at": datetime.now(timezone.utc).isoformat()})
+        await db.execute(
+            "INSERT INTO users (name, email, password_hash, role, phone, address, credit_limit, debt, specialty, created_at) VALUES ($1,$2,$3,$4,'','',0,0,'',$5)",
+            "Admin", email, hash_password(pw), "admin", now
+        )
         logger.info(f"Admin yaratildi: {email}")
     elif not verify_password(pw, ex["password_hash"]):
-        await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(pw)}})
-    if await db.materials.count_documents({}) == 0:
-        await db.materials.insert_many([
-            {"name":"Blackout Parda","category":"Parda","price_per_sqm":7.0,"stock_quantity":500,"unit":"kv.m","description":"Yorug'lik o'tkazmaydigan parda","image_url":"https://images.pexels.com/photos/4814070/pexels-photo-4814070.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940","created_at":datetime.now(timezone.utc).isoformat()},
-            {"name":"Tull Parda","category":"Parda","price_per_sqm":3.5,"stock_quantity":800,"unit":"kv.m","description":"Shaffof tull parda","image_url":"https://images.unsplash.com/photo-1574197635162-68e4b468e4e9?w=600","created_at":datetime.now(timezone.utc).isoformat()},
-            {"name":"Roller Jalyuzi","category":"Jalyuzi","price_per_sqm":10.0,"stock_quantity":300,"unit":"kv.m","description":"Zamonaviy roller jalyuzi","image_url":"https://images.pexels.com/photos/19166538/pexels-photo-19166538.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940","created_at":datetime.now(timezone.utc).isoformat()},
-            {"name":"Gorizontal Jalyuzi","category":"Jalyuzi","price_per_sqm":8.0,"stock_quantity":400,"unit":"kv.m","description":"Alyuminiy gorizontal jalyuzi","image_url":"https://images.unsplash.com/photo-1603299938527-d035bc6fc2c8?w=600","created_at":datetime.now(timezone.utc).isoformat()},
-            {"name":"Vertikal Jalyuzi","category":"Jalyuzi","price_per_sqm":6.0,"stock_quantity":350,"unit":"kv.m","description":"Ofis uchun vertikal jalyuzi","image_url":"https://images.pexels.com/photos/8955198/pexels-photo-8955198.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940","created_at":datetime.now(timezone.utc).isoformat()},
-            {"name":"Rimskaya Parda","category":"Parda","price_per_sqm":9.0,"stock_quantity":200,"unit":"kv.m","description":"Premium rimskaya parda","image_url":"https://images.unsplash.com/photo-1729277980958-092c5e9e2ea4?w=600","created_at":datetime.now(timezone.utc).isoformat()},
-        ])
+        await db.execute("UPDATE users SET password_hash = $1 WHERE email = $2", hash_password(pw), email)
+
+    mat_count = await db.fetchval("SELECT COUNT(*) FROM materials")
+    if mat_count == 0:
+        materials_data = [
+            ("Blackout Parda", "Parda", 7.0, 500, "kv.m", "Yorug'lik o'tkazmaydigan parda", "https://images.pexels.com/photos/4814070/pexels-photo-4814070.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
+            ("Tull Parda", "Parda", 3.5, 800, "kv.m", "Shaffof tull parda", "https://images.unsplash.com/photo-1574197635162-68e4b468e4e9?w=600"),
+            ("Roller Jalyuzi", "Jalyuzi", 10.0, 300, "kv.m", "Zamonaviy roller jalyuzi", "https://images.pexels.com/photos/19166538/pexels-photo-19166538.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
+            ("Gorizontal Jalyuzi", "Jalyuzi", 8.0, 400, "kv.m", "Alyuminiy gorizontal jalyuzi", "https://images.unsplash.com/photo-1603299938527-d035bc6fc2c8?w=600"),
+            ("Vertikal Jalyuzi", "Jalyuzi", 6.0, 350, "kv.m", "Ofis uchun vertikal jalyuzi", "https://images.pexels.com/photos/8955198/pexels-photo-8955198.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
+            ("Rimskaya Parda", "Parda", 9.0, 200, "kv.m", "Premium rimskaya parda", "https://images.unsplash.com/photo-1729277980958-092c5e9e2ea4?w=600"),
+        ]
+        for m in materials_data:
+            await db.execute(
+                "INSERT INTO materials (name, category, price_per_sqm, stock_quantity, unit, description, image_url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+                m[0], m[1], m[2], m[3], m[4], m[5], m[6], now
+            )
         logger.info("Materiallar yaratildi")
-    if not await db.users.find_one({"email": "dealer@test.uz"}):
-        await db.users.insert_one({"email":"dealer@test.uz","password_hash":hash_password("dealer123"),"name":"Test Diler","role":"dealer","phone":"+998901234567","address":"Toshkent, Yunusobod","credit_limit":5000,"debt":0,"created_at":datetime.now(timezone.utc).isoformat()})
+
+    if not await db.fetchrow("SELECT id FROM users WHERE email = 'dealer@test.uz'"):
+        await db.execute(
+            "INSERT INTO users (name, email, password_hash, role, phone, address, credit_limit, debt, specialty, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,0,'',$8)",
+            "Test Diler", "dealer@test.uz", hash_password("dealer123"), "dealer", "+998901234567", "Toshkent, Yunusobod", 5000.0, now
+        )
         logger.info("Demo diler yaratildi")
-    if not await db.users.find_one({"email": "worker@test.uz"}):
-        await db.users.insert_one({"email":"worker@test.uz","password_hash":hash_password("worker123"),"name":"Aziz Ishchi","role":"worker","phone":"+998901112233","specialty":"Jalyuzi o'rnatish","created_at":datetime.now(timezone.utc).isoformat()})
+
+    if not await db.fetchrow("SELECT id FROM users WHERE email = 'worker@test.uz'"):
+        await db.execute(
+            "INSERT INTO users (name, email, password_hash, role, phone, address, credit_limit, debt, specialty, created_at) VALUES ($1,$2,$3,$4,$5,'',$6,0,$7,$8)",
+            "Aziz Ishchi", "worker@test.uz", hash_password("worker123"), "worker", "+998901112233", 0.0, "Jalyuzi o'rnatish", now
+        )
         logger.info("Demo ishchi yaratildi")
 
 @app.on_event("startup")
 async def startup():
-    await db.users.create_index("email", unique=True)
-    await db.messages.create_index([("sender_id",1),("receiver_id",1)])
-    await db.orders.create_index("dealer_id")
-    await db.orders.create_index("order_code")
-    # Fix old orders without order_code
-    async for o in db.orders.find({"$or": [{"order_code": {"$exists": False}}, {"order_code": ""}]}):
-        await db.orders.update_one({"_id": o["_id"]}, {"$set": {"order_code": generate_order_code()}})
-    await seed_admin()
-    logger.info("Server ishga tushdi!")
+    global pool
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    async with pool.acquire() as conn:
+        await create_tables(conn)
+        await seed_admin(conn)
+    logger.info("Server ishga tushdi! (PostgreSQL)")
+
+@app.on_event("shutdown")
+async def shutdown():
+    global pool
+    if pool:
+        await pool.close()
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-@app.on_event("shutdown")
-async def shutdown_db_client(): client.close()
