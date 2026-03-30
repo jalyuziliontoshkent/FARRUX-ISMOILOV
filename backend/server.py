@@ -103,6 +103,7 @@ class MaterialCreate(BaseModel):
     stock_quantity: float
     unit: str = "kv.m"
     description: Optional[str] = ""
+    image_url: Optional[str] = ""
 
 class MaterialUpdate(BaseModel):
     name: Optional[str] = None
@@ -110,6 +111,7 @@ class MaterialUpdate(BaseModel):
     price_per_sqm: Optional[float] = None
     stock_quantity: Optional[float] = None
     description: Optional[str] = None
+    image_url: Optional[str] = None
 
 class OrderItemCreate(BaseModel):
     material_id: str
@@ -475,12 +477,12 @@ async def seed_admin():
     mat_count = await db.materials.count_documents({})
     if mat_count == 0:
         demo_materials = [
-            {"name": "Blackout Parda", "category": "Parda", "price_per_sqm": 7.0, "stock_quantity": 500, "unit": "kv.m", "description": "Yorug'lik o'tkazmaydigan parda", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Tull Parda", "category": "Parda", "price_per_sqm": 3.5, "stock_quantity": 800, "unit": "kv.m", "description": "Shaffof tull parda", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Roller Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 10.0, "stock_quantity": 300, "unit": "kv.m", "description": "Zamonaviy roller jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Gorizontal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 8.0, "stock_quantity": 400, "unit": "kv.m", "description": "Alyuminiy gorizontal jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Vertikal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 6.0, "stock_quantity": 350, "unit": "kv.m", "description": "Ofis uchun vertikal jalyuzi", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"name": "Rimskaya Parda", "category": "Parda", "price_per_sqm": 9.0, "stock_quantity": 200, "unit": "kv.m", "description": "Premium rimskaya parda", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Blackout Parda", "category": "Parda", "price_per_sqm": 7.0, "stock_quantity": 500, "unit": "kv.m", "description": "Yorug'lik o'tkazmaydigan parda", "image_url": "https://images.pexels.com/photos/4814070/pexels-photo-4814070.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Tull Parda", "category": "Parda", "price_per_sqm": 3.5, "stock_quantity": 800, "unit": "kv.m", "description": "Shaffof tull parda", "image_url": "https://images.unsplash.com/photo-1574197635162-68e4b468e4e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzV8MHwxfHNlYXJjaHwyfHxzaGVlciUyMGN1cnRhaW4lMjB3aGl0ZSUyMGVsZWdhbnQlMjB3aW5kb3clMjBsaWdodHxlbnwwfHx8fDE3NzQ4NjAxODd8MA&ixlib=rb-4.1.0&q=85", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Roller Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 10.0, "stock_quantity": 300, "unit": "kv.m", "description": "Zamonaviy roller jalyuzi", "image_url": "https://images.pexels.com/photos/19166538/pexels-photo-19166538.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Gorizontal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 8.0, "stock_quantity": 400, "unit": "kv.m", "description": "Alyuminiy gorizontal jalyuzi", "image_url": "https://images.unsplash.com/photo-1603299938527-d035bc6fc2c8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwxfHx2ZXJ0aWNhbCUyMGJsaW5kcyUyMG9mZmljZSUyMHdpbmRvd3xlbnwwfHx8fDE3NzQ4NjAxOTd8MA&ixlib=rb-4.1.0&q=85", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Vertikal Jalyuzi", "category": "Jalyuzi", "price_per_sqm": 6.0, "stock_quantity": 350, "unit": "kv.m", "description": "Ofis uchun vertikal jalyuzi", "image_url": "https://images.pexels.com/photos/8955198/pexels-photo-8955198.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"name": "Rimskaya Parda", "category": "Parda", "price_per_sqm": 9.0, "stock_quantity": 200, "unit": "kv.m", "description": "Premium rimskaya parda", "image_url": "https://images.unsplash.com/photo-1729277980958-092c5e9e2ea4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzV8MHwxfHNlYXJjaHwxfHxzaGVlciUyMGN1cnRhaW4lMjB3aGl0ZSUyMGVsZWdhbnQlMjB3aW5kb3clMjBsaWdodHxlbnwwfHx8fDE3NzQ4NjAxODd8MA&ixlib=rb-4.1.0&q=85", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.materials.insert_many(demo_materials)
         logger.info("Demo materiallar yaratildi ($)")
