@@ -40,7 +40,7 @@ export default function AdminOrders() {
   };
 
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
-  const filters = ['all', 'kutilmoqda', 'tasdiqlangan', 'tayyorlanmoqda', 'yetkazildi', 'rad_etilgan'];
+  const filters = ['all', 'kutilmoqda', 'tasdiqlangan', 'tayyorlanmoqda', 'tayyor', 'yetkazilmoqda', 'yetkazildi', 'rad_etilgan'];
   const filterLabels: Record<string, string> = { all: 'Barchasi', ...statusLabels };
 
   return (
@@ -112,6 +112,12 @@ export default function AdminOrders() {
             </View>
             {selectedOrder && (
               <ScrollView style={styles.modalBody}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1 }}>Buyurtma:</Text>
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 1.5 }}>{selectedOrder.order_code}</Text>
+                  </View>
+                </View>
                 <Text style={styles.modalLabel}>Diler: {selectedOrder.dealer_name}</Text>
                 <Text style={styles.modalLabel}>Sana: {new Date(selectedOrder.created_at).toLocaleDateString('uz-UZ')}</Text>
                 <Text style={styles.modalLabel}>Status: {statusLabels[selectedOrder.status]}</Text>
@@ -166,15 +172,6 @@ export default function AdminOrders() {
                     onPress={() => updateStatus(selectedOrder.id, 'tayyorlanmoqda')}
                   >
                     <Text style={styles.approveBtnText}>Tayyorlashga o'tkazish</Text>
-                  </TouchableOpacity>
-                )}
-                {selectedOrder.status === 'tayyorlanmoqda' && (
-                  <TouchableOpacity
-                    testID="deliver-order-btn"
-                    style={styles.approveBtn}
-                    onPress={() => updateStatus(selectedOrder.id, 'yetkazildi')}
-                  >
-                    <Text style={styles.approveBtnText}>Yetkazildi</Text>
                   </TouchableOpacity>
                 )}
               </ScrollView>

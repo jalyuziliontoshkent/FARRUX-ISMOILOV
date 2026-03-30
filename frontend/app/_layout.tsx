@@ -8,7 +8,7 @@ export type UserType = {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'dealer';
+  role: 'admin' | 'dealer' | 'worker';
   phone?: string;
   address?: string;
   credit_limit?: number;
@@ -61,7 +61,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (auth.loading) return;
-    const inAuthGroup = segments[0] === '(admin)' || segments[0] === '(dealer)';
+    const inAuthGroup = segments[0] === '(admin)' || segments[0] === '(dealer)' || segments[0] === '(worker)';
     if (!auth.user && inAuthGroup) {
       router.replace('/');
     } else if (auth.user) {
@@ -69,6 +69,8 @@ export default function RootLayout() {
         router.replace('/(admin)/dashboard');
       } else if (auth.user.role === 'dealer' && segments[0] !== '(dealer)') {
         router.replace('/(dealer)/dashboard');
+      } else if (auth.user.role === 'worker' && segments[0] !== '(worker)') {
+        router.replace('/(worker)/tasks');
       }
     }
   }, [auth.user, auth.loading]);

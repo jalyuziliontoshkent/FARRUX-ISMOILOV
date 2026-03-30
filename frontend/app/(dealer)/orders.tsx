@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Package } from 'lucide-react-native';
+import { Package, Truck, Phone, Hash } from 'lucide-react-native';
 import { api } from '../_layout';
 import { colors, statusColors, statusLabels, formatPrice } from '../../src/utils/theme';
 
@@ -20,65 +20,84 @@ export default function DealerOrders() {
 
   useEffect(() => { fetchOrders(); }, []);
 
+  const allStatuses = ['kutilmoqda','tasdiqlangan','tayyorlanmoqda','tayyor','yetkazilmoqda','yetkazildi'];
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Mening Buyurtmalarim</Text>
+    <SafeAreaView style={s.container}>
+      <Text style={s.title}>Buyurtmalarim</Text>
       {loading ? (
         <ActivityIndicator size="large" color="#fff" style={{ flex: 1 }} />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchOrders(); }} tintColor="#fff" />}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={s.scrollContent}
         >
           {orders.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Package size={48} color="rgba(255,255,255,0.15)" />
-              <Text style={styles.emptyText}>Buyurtmalar yo'q</Text>
-              <Text style={styles.emptySubText}>Yangi buyurtma yaratish uchun "Buyurtma" tabini bosing</Text>
+            <View style={s.emptyState}>
+              <Package size={48} color="rgba(255,255,255,0.1)" />
+              <Text style={s.emptyText}>Buyurtmalar yo'q</Text>
             </View>
           ) : orders.map(order => (
-            <View key={order.id} style={styles.orderCard} testID={`my-order-${order.id}`}>
-              <View style={styles.orderHeader}>
-                <Text style={styles.orderDate}>{new Date(order.created_at).toLocaleDateString('uz-UZ')}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: (statusColors[order.status] || '#fff') + '20' }]}>
-                  <View style={[styles.statusDot, { backgroundColor: statusColors[order.status] }]} />
-                  <Text style={[styles.statusText, { color: statusColors[order.status] }]}>{statusLabels[order.status]}</Text>
+            <View key={order.id} style={s.orderCard} testID={`my-order-${order.id}`}>
+              <View style={s.orderHeader}>
+                <View style={s.codeSection}>
+                  <Hash size={14} color="rgba(255,255,255,0.5)" />
+                  <Text style={s.codeText}>{order.order_code}</Text>
+                </View>
+                <View style={[s.statusBadge, { backgroundColor: (statusColors[order.status] || '#fff') + '18' }]}>
+                  <View style={[s.statusDot, { backgroundColor: statusColors[order.status] }]} />
+                  <Text style={[s.statusText, { color: statusColors[order.status] }]}>{statusLabels[order.status] || order.status}</Text>
                 </View>
               </View>
 
+              <Text style={s.orderDate}>{new Date(order.created_at).toLocaleString('uz-UZ')}</Text>
+
               {/* Status tracker */}
-              <View style={styles.tracker}>
-                {['kutilmoqda', 'tasdiqlangan', 'tayyorlanmoqda', 'yetkazildi'].map((s, i) => {
-                  const statuses = ['kutilmoqda', 'tasdiqlangan', 'tayyorlanmoqda', 'yetkazildi'];
-                  const currentIdx = statuses.indexOf(order.status);
-                  const isActive = i <= currentIdx && order.status !== 'rad_etilgan';
+              <View style={s.tracker}>
+                {allStatuses.map((st, i) => {
+                  const idx = allStatuses.indexOf(order.status);
+                  const active = i <= idx && order.status !== 'rad_etilgan';
                   return (
-                    <View key={s} style={styles.trackerStep}>
-                      <View style={[styles.trackerDot, isActive && styles.trackerDotActive]} />
-                      {i < 3 && <View style={[styles.trackerLine, isActive && styles.trackerLineActive]} />}
+                    <View key={st} style={s.trackerStep}>
+                      <View style={[s.trackerDot, active && s.trackerDotActive]} />
+                      {i < allStatuses.length - 1 && <View style={[s.trackerLine, active && s.trackerLineActive]} />}
                     </View>
                   );
                 })}
               </View>
 
               {order.status === 'rad_etilgan' && order.rejection_reason ? (
-                <View style={styles.rejectionBox}>
-                  <Text style={styles.rejectionText}>Rad etish sababi: {order.rejection_reason}</Text>
-                </View>
+                <View style={s.rejectBox}><Text style={s.rejectText}>Sabab: {order.rejection_reason}</Text></View>
               ) : null}
+
+              {/* Delivery info */}
+              {order.vehicle_info && (
+                <View style={s.deliveryCard}>
+                  <Truck size={16} color="#448AFF" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.deliveryTitle}>Yetkazib berish</Text>
+                    <Text style={s.deliveryPlate}>{order.vehicle_info.plate_number}</Text>
+                    <Text style={s.deliveryDriver}>{order.vehicle_info.driver_name}</Text>
+                  </View>
+                  <View style={s.callBtn}>
+                    <Phone size={14} color="#fff" />
+                    <Text style={s.callText}>{order.vehicle_info.driver_phone}</Text>
+                  </View>
+                </View>
+              )}
 
               {/* Items */}
               {order.items?.map((item: any, i: number) => (
-                <View key={i} style={styles.itemRow}>
-                  <Text style={styles.itemName}>{item.material_name}</Text>
-                  <Text style={styles.itemDetail}>{item.width}m × {item.height}m = {item.sqm} kv.m</Text>
+                <View key={i} style={s.itemRow}>
+                  <Text style={s.itemName}>{item.material_name}</Text>
+                  <Text style={s.itemDetail}>{item.width}m x {item.height}m = {item.sqm} kv.m</Text>
                 </View>
               ))}
 
-              <View style={styles.orderFooter}>
-                <Text style={styles.orderTotal}>Jami: {order.total_sqm} kv.m</Text>
-                <Text style={styles.orderPrice}>{formatPrice(order.total_price)}</Text>
+              <View style={s.orderFooter}>
+                <Text style={s.orderTotal}>{order.total_sqm} kv.m</Text>
+                <Text style={s.orderPrice}>{formatPrice(order.total_price)}</Text>
               </View>
             </View>
           ))}
@@ -88,39 +107,38 @@ export default function DealerOrders() {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  title: { fontSize: 24, fontWeight: '300', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
+  title: { fontSize: 28, fontWeight: '700', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
-  emptyState: { alignItems: 'center', paddingTop: 80, gap: 8 },
+  emptyState: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 16, color: 'rgba(255,255,255,0.3)' },
-  emptySubText: { fontSize: 13, color: 'rgba(255,255,255,0.2)', textAlign: 'center', maxWidth: 250 },
-  orderCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)', padding: 18, marginBottom: 14,
-  },
+  orderCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', padding: 18, marginBottom: 14 },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  orderDate: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
+  codeSection: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  codeText: { fontSize: 14, fontWeight: '700', color: '#fff', letterSpacing: 1.5, fontVariant: ['tabular-nums'] },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, gap: 5 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  tracker: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, paddingHorizontal: 8 },
+  statusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  orderDate: { fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 8 },
+  tracker: { flexDirection: 'row', alignItems: 'center', marginVertical: 14, paddingHorizontal: 4 },
   trackerStep: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   trackerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.1)' },
   trackerDotActive: { backgroundColor: '#fff' },
   trackerLine: { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.06)', marginHorizontal: 2 },
   trackerLineActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  rejectionBox: {
-    backgroundColor: 'rgba(255,82,82,0.1)', borderRadius: 12, padding: 10, marginBottom: 12,
-    borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)',
-  },
-  rejectionText: { fontSize: 12, color: '#FF5252' },
-  itemRow: {
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)',
-  },
+  rejectBox: { backgroundColor: 'rgba(255,82,82,0.1)', borderRadius: 12, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)' },
+  rejectText: { fontSize: 12, color: '#FF5252' },
+  deliveryCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(68,138,255,0.08)', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(68,138,255,0.15)' },
+  deliveryTitle: { fontSize: 11, color: 'rgba(68,138,255,0.7)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  deliveryPlate: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  deliveryDriver: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  callBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  callText: { fontSize: 11, color: '#fff' },
+  itemRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
   itemName: { fontSize: 14, fontWeight: '500', color: '#fff' },
   itemDetail: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
-  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   orderTotal: { fontSize: 13, color: 'rgba(255,255,255,0.5)' },
-  orderPrice: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  orderPrice: { fontSize: 17, fontWeight: '600', color: '#fff' },
 });

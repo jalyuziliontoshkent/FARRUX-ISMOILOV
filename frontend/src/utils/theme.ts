@@ -25,6 +25,8 @@ export const statusColors: Record<string, string> = {
   kutilmoqda: colors.pending,
   tasdiqlangan: colors.approved,
   tayyorlanmoqda: colors.preparing,
+  tayyor: '#7C4DFF',
+  yetkazilmoqda: '#448AFF',
   yetkazildi: colors.delivered,
   rad_etilgan: colors.rejected,
 };
@@ -33,6 +35,8 @@ export const statusLabels: Record<string, string> = {
   kutilmoqda: 'Kutilmoqda',
   tasdiqlangan: 'Tasdiqlangan',
   tayyorlanmoqda: 'Tayyorlanmoqda',
+  tayyor: 'Tayyor',
+  yetkazilmoqda: 'Yetkazilmoqda',
   yetkazildi: 'Yetkazildi',
   rad_etilgan: 'Rad etilgan',
 };

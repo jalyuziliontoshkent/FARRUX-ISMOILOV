@@ -101,3 +101,125 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "CurtainOrderApp MVP - QR code olib tashlandi, buyurtma raqami bilan ishlash, admin tasdiqlash orqali delivery"
+
+backend:
+  - task: "Auth Login API (admin, dealer, worker)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Login works for all 3 roles including worker routing"
+
+  - task: "Workers CRUD API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "POST/GET/DELETE workers endpoints working"
+
+  - task: "Vehicles CRUD API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "POST/GET/DELETE vehicles endpoints working"
+
+  - task: "Order Item Assignment to Worker"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "PUT /orders/{oid}/items/{idx}/assign works"
+
+  - task: "Worker Tasks API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "GET /worker/tasks and PUT complete endpoint"
+
+  - task: "Admin Confirm Delivery API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "PUT /orders/{oid}/confirm-delivery - admin confirms delivery, no QR needed"
+
+  - task: "Delivery Vehicle Assignment API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "PUT /orders/{oid}/delivery assigns vehicle"
+
+  - task: "Statistics API with tayyor status"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added tayyor status to statistics and revenue calculation"
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Auth Login for all 3 roles"
+    - "Workers CRUD"
+    - "Vehicles CRUD"
+    - "Order Item Assignment"
+    - "Worker Tasks complete flow"
+    - "Admin Confirm Delivery"
+    - "Delivery Vehicle Assignment"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "QR code removed, replaced with order number. Admin now confirms delivery directly via PUT /orders/{oid}/confirm-delivery. Worker completes items -> status auto-changes to tayyor. Test credentials: admin@curtain.uz/admin123, dealer@test.uz/dealer123, worker@test.uz/worker123"

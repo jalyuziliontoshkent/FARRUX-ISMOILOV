@@ -37,6 +37,8 @@ export default function LoginScreen() {
       await AsyncStorage.setItem('user', JSON.stringify(data.user));
       if (data.user.role === 'admin') {
         router.replace('/(admin)/dashboard');
+      } else if (data.user.role === 'worker') {
+        router.replace('/(worker)/tasks');
       } else {
         router.replace('/(dealer)/dashboard');
       }
