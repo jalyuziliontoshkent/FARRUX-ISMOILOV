@@ -42,7 +42,7 @@ export default function AdminChat() {
   useEffect(() => {
     if (selectedPartner) {
       fetchMessages(selectedPartner.id);
-      intervalRef.current = setInterval(() => fetchMessages(selectedPartner.id), 3000);
+      intervalRef.current = setInterval(() => fetchMessages(selectedPartner.id), 10000);
       return () => clearInterval(intervalRef.current);
     }
   }, [selectedPartner]);

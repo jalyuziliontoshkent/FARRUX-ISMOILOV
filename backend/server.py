@@ -92,8 +92,10 @@ class LoginReq(BaseModel): email: str; password: str
 class DealerCreate(BaseModel): name: str; email: str; password: str; phone: str = ""; address: str = ""; credit_limit: float = 0
 class DealerUpdate(BaseModel): name: Optional[str] = None; phone: Optional[str] = None; address: Optional[str] = None; credit_limit: Optional[float] = None
 class WorkerCreate(BaseModel): name: str; email: str; password: str; phone: str = ""; specialty: str = ""
-class MaterialCreate(BaseModel): name: str; category: str; price_per_sqm: float; stock_quantity: float; unit: str = "kv.m"; description: str = ""; image_url: str = ""
-class MaterialUpdate(BaseModel): name: Optional[str] = None; category: Optional[str] = None; price_per_sqm: Optional[float] = None; stock_quantity: Optional[float] = None; description: Optional[str] = None; image_url: Optional[str] = None
+class MaterialCreate(BaseModel): name: str; category: str = ""; category_id: Optional[int] = None; price_per_sqm: float; stock_quantity: float; unit: str = "kv.m"; description: str = ""; image_url: str = ""
+class MaterialUpdate(BaseModel): name: Optional[str] = None; category: Optional[str] = None; category_id: Optional[int] = None; price_per_sqm: Optional[float] = None; stock_quantity: Optional[float] = None; description: Optional[str] = None; image_url: Optional[str] = None
+class CategoryCreate(BaseModel): name: str; description: str = ""; image_url: str = ""
+class CategoryUpdate(BaseModel): name: Optional[str] = None; description: Optional[str] = None; image_url: Optional[str] = None
 class OrderItemCreate(BaseModel): material_id: str; material_name: str; width: float; height: float; quantity: int = 1; price_per_sqm: float; notes: str = ""
 class OrderCreate(BaseModel): items: List[OrderItemCreate]; notes: str = ""
 class OrderStatusUpdate(BaseModel): status: str; rejection_reason: str = ""
@@ -248,27 +250,86 @@ async def delete_worker(wid: str, admin: dict = Depends(require_admin)):
     if result == "DELETE 0": raise HTTPException(404, "Not found")
     return {"message": "Deleted"}
 
+# ─── CATEGORIES ───
+@api_router.post("/categories")
+async def create_category(d: CategoryCreate, admin: dict = Depends(require_admin)):
+    db = await get_pool()
+    now = datetime.now(timezone.utc).isoformat()
+    row = await db.fetchrow(
+        "INSERT INTO categories (name, description, image_url, created_at) VALUES ($1,$2,$3,$4) RETURNING *",
+        d.name, d.description, d.image_url, now
+    )
+    c = row_to_dict(row); c["id"] = str(c["id"])
+    return c
+
+@api_router.get("/categories")
+async def list_categories(user: dict = Depends(get_current_user)):
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM categories ORDER BY name ASC")
+    out = []
+    for r in rows:
+        c = row_to_dict(r); c["id"] = str(c["id"])
+        c["material_count"] = await db.fetchval("SELECT COUNT(*) FROM materials WHERE category_id = $1", r["id"])
+        out.append(c)
+    return out
+
+@api_router.put("/categories/{cid}")
+async def update_category(cid: str, d: CategoryUpdate, admin: dict = Depends(require_admin)):
+    db = await get_pool()
+    updates = []; params = []; idx = 1
+    for field in ["name", "description", "image_url"]:
+        val = getattr(d, field, None)
+        if val is not None:
+            updates.append(f"{field} = ${idx}"); params.append(val); idx += 1
+    if not updates: raise HTTPException(400, "No data")
+    params.append(int(cid))
+    await db.execute(f"UPDATE categories SET {', '.join(updates)} WHERE id = ${idx}", *params)
+    row = await db.fetchrow("SELECT * FROM categories WHERE id = $1", int(cid))
+    c = row_to_dict(row); c["id"] = str(c["id"])
+    return c
+
+@api_router.delete("/categories/{cid}")
+async def delete_category(cid: str, admin: dict = Depends(require_admin)):
+    db = await get_pool()
+    mat_count = await db.fetchval("SELECT COUNT(*) FROM materials WHERE category_id = $1", int(cid))
+    if mat_count > 0:
+        raise HTTPException(400, f"Bu kategoriyada {mat_count} ta mahsulot bor. Avval mahsulotlarni ko'chiring.")
+    result = await db.execute("DELETE FROM categories WHERE id = $1", int(cid))
+    if result == "DELETE 0": raise HTTPException(404, "Not found")
+    return {"message": "Deleted"}
+
 # ─── MATERIALS ───
 @api_router.post("/materials")
 async def create_material(d: MaterialCreate, admin: dict = Depends(require_admin)):
     db = await get_pool()
     now = datetime.now(timezone.utc).isoformat()
     row = await db.fetchrow(
-        "INSERT INTO materials (name, category, price_per_sqm, stock_quantity, unit, description, image_url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
-        d.name, d.category, d.price_per_sqm, d.stock_quantity, d.unit, d.description, d.image_url, now
+        "INSERT INTO materials (name, category, category_id, price_per_sqm, stock_quantity, unit, description, image_url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+        d.name, d.category, d.category_id, d.price_per_sqm, d.stock_quantity, d.unit, d.description, d.image_url, now
     )
-    m = row_to_dict(row)
-    m["id"] = str(m["id"])
+    m = row_to_dict(row); m["id"] = str(m["id"])
+    if m.get("category_id"): m["category_id"] = str(m["category_id"])
     return m
 
 @api_router.get("/materials")
 async def list_materials(user: dict = Depends(get_current_user)):
     db = await get_pool()
-    rows = await db.fetch("SELECT * FROM materials ORDER BY created_at DESC")
+    rows = await db.fetch("SELECT m.*, c.name as category_name FROM materials m LEFT JOIN categories c ON m.category_id = c.id ORDER BY c.name ASC, m.name ASC")
     out = []
     for r in rows:
-        m = row_to_dict(r)
-        m["id"] = str(m["id"])
+        m = row_to_dict(r); m["id"] = str(m["id"])
+        if m.get("category_id"): m["category_id"] = str(m["category_id"])
+        out.append(m)
+    return out
+
+@api_router.get("/materials/by-category/{cid}")
+async def list_materials_by_category(cid: str, user: dict = Depends(get_current_user)):
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM materials WHERE category_id = $1 ORDER BY name ASC", int(cid))
+    out = []
+    for r in rows:
+        m = row_to_dict(r); m["id"] = str(m["id"])
+        if m.get("category_id"): m["category_id"] = str(m["category_id"])
         out.append(m)
     return out
 
@@ -278,7 +339,7 @@ async def update_material(mid: str, d: MaterialUpdate, admin: dict = Depends(req
     updates = []
     params = []
     idx = 1
-    for field in ["name", "category", "price_per_sqm", "stock_quantity", "description", "image_url"]:
+    for field in ["name", "category", "price_per_sqm", "stock_quantity", "description", "image_url", "category_id"]:
         val = getattr(d, field, None)
         if val is not None:
             updates.append(f"{field} = ${idx}")
@@ -419,16 +480,47 @@ async def complete_worker_task(oid: str, item_idx: int, user: dict = Depends(get
     items = json.loads(order["items"]) if isinstance(order["items"], str) else order["items"]
     if item_idx >= len(items): raise HTTPException(400)
     if items[item_idx].get("assigned_worker_id") != user["id"]: raise HTTPException(403, "Not your task")
+    if items[item_idx].get("worker_status") == "completed":
+        # Already completed - return current order without error
+        o = row_to_dict(order)
+        o["id"] = str(o["id"]); o["dealer_id"] = str(o["dealer_id"])
+        o["items"] = items
+        o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+        return o
     items[item_idx]["worker_status"] = "completed"
     now = datetime.now(timezone.utc).isoformat()
     await db.execute("UPDATE orders SET items = $1, updated_at = $2 WHERE id = $3", json.dumps(items), now, int(oid))
+
+    # Check if all assigned items are completed
     all_done = all(it.get("worker_status") == "completed" for it in items if it.get("assigned_worker_id"))
     if all_done:
         await db.execute("UPDATE orders SET status = 'tayyor', updated_at = $1 WHERE id = $2", now, int(oid))
+        # Send auto-message to dealer
+        admin = await db.fetchrow("SELECT id, name FROM users WHERE role = 'admin' LIMIT 1")
+        if admin and order["dealer_id"]:
+            await db.execute(
+                "INSERT INTO messages (sender_id, sender_name, sender_role, receiver_id, text, read, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+                admin["id"], admin["name"] or "Admin", "admin", order["dealer_id"],
+                f"Buyurtma #{order['order_code']} tayyor! Barcha ishlar tugallandi.",
+                False, now
+            )
+        logger.info(f"Buyurtma #{order['order_code']} tayyor — dilerga xabar yuborildi")
+    else:
+        # Single item completed — notify admin via message
+        admin = await db.fetchrow("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+        if admin:
+            completed_count = sum(1 for it in items if it.get("worker_status") == "completed")
+            total_assigned = sum(1 for it in items if it.get("assigned_worker_id"))
+            await db.execute(
+                "INSERT INTO messages (sender_id, sender_name, sender_role, receiver_id, text, read, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+                int(user["id"]), user.get("name", "Ishchi"), "worker", admin["id"],
+                f"#{order['order_code']}: {items[item_idx]['material_name']} tayyor ({completed_count}/{total_assigned})",
+                False, now
+            )
+
     o = await db.fetchrow("SELECT * FROM orders WHERE id = $1", int(oid))
     o = row_to_dict(o)
-    o["id"] = str(o["id"])
-    o["dealer_id"] = str(o["dealer_id"])
+    o["id"] = str(o["id"]); o["dealer_id"] = str(o["dealer_id"])
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
     return o
@@ -592,10 +684,20 @@ async def create_tables(db):
         )
     """)
     await db.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            image_url TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        )
+    """)
+    await db.execute("""
         CREATE TABLE IF NOT EXISTS materials (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             category TEXT NOT NULL DEFAULT '',
+            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
             price_per_sqm FLOAT NOT NULL DEFAULT 0,
             stock_quantity FLOAT NOT NULL DEFAULT 0,
             unit TEXT DEFAULT 'kv.m',
@@ -604,6 +706,11 @@ async def create_tables(db):
             created_at TEXT DEFAULT ''
         )
     """)
+    # Add category_id column if not exists (migration)
+    try:
+        await db.execute("ALTER TABLE materials ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL")
+    except Exception:
+        pass
     await db.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id SERIAL PRIMARY KEY,
@@ -650,18 +757,33 @@ async def seed_admin(db):
 
     mat_count = await db.fetchval("SELECT COUNT(*) FROM materials")
     if mat_count == 0:
+        # Create default categories
+        cat_count = await db.fetchval("SELECT COUNT(*) FROM categories")
+        if cat_count == 0:
+            cats = [
+                ("Parda", "Har xil parda turlari"),
+                ("Jalyuzi", "Gorizontal va vertikal jalyuzilar"),
+                ("Aksessuar", "Karniz, gardina va boshqa aksessuarlar"),
+            ]
+            for c in cats:
+                await db.execute("INSERT INTO categories (name, description, created_at) VALUES ($1,$2,$3)", c[0], c[1], now)
+            logger.info("Kategoriyalar yaratildi")
+
+        parda_id = await db.fetchval("SELECT id FROM categories WHERE name = 'Parda'")
+        jalyuzi_id = await db.fetchval("SELECT id FROM categories WHERE name = 'Jalyuzi'")
+
         materials_data = [
-            ("Blackout Parda", "Parda", 7.0, 500, "kv.m", "Yorug'lik o'tkazmaydigan parda", "https://images.pexels.com/photos/4814070/pexels-photo-4814070.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("Tull Parda", "Parda", 3.5, 800, "kv.m", "Shaffof tull parda", "https://images.unsplash.com/photo-1574197635162-68e4b468e4e9?w=600"),
-            ("Roller Jalyuzi", "Jalyuzi", 10.0, 300, "kv.m", "Zamonaviy roller jalyuzi", "https://images.pexels.com/photos/19166538/pexels-photo-19166538.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("Gorizontal Jalyuzi", "Jalyuzi", 8.0, 400, "kv.m", "Alyuminiy gorizontal jalyuzi", "https://images.unsplash.com/photo-1603299938527-d035bc6fc2c8?w=600"),
-            ("Vertikal Jalyuzi", "Jalyuzi", 6.0, 350, "kv.m", "Ofis uchun vertikal jalyuzi", "https://images.pexels.com/photos/8955198/pexels-photo-8955198.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
-            ("Rimskaya Parda", "Parda", 9.0, 200, "kv.m", "Premium rimskaya parda", "https://images.unsplash.com/photo-1729277980958-092c5e9e2ea4?w=600"),
+            ("Blackout Parda", "Parda", parda_id, 7.0, 500, "kv.m", "Yorug'lik o'tkazmaydigan parda", "https://images.pexels.com/photos/4814070/pexels-photo-4814070.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
+            ("Tull Parda", "Parda", parda_id, 3.5, 800, "kv.m", "Shaffof tull parda", "https://images.unsplash.com/photo-1574197635162-68e4b468e4e9?w=600"),
+            ("Roller Jalyuzi", "Jalyuzi", jalyuzi_id, 10.0, 300, "kv.m", "Zamonaviy roller jalyuzi", "https://images.pexels.com/photos/19166538/pexels-photo-19166538.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
+            ("Gorizontal Jalyuzi", "Jalyuzi", jalyuzi_id, 8.0, 400, "kv.m", "Alyuminiy gorizontal jalyuzi", "https://images.unsplash.com/photo-1603299938527-d035bc6fc2c8?w=600"),
+            ("Vertikal Jalyuzi", "Jalyuzi", jalyuzi_id, 6.0, 350, "kv.m", "Ofis uchun vertikal jalyuzi", "https://images.pexels.com/photos/8955198/pexels-photo-8955198.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"),
+            ("Rimskaya Parda", "Parda", parda_id, 9.0, 200, "kv.m", "Premium rimskaya parda", "https://images.unsplash.com/photo-1729277980958-092c5e9e2ea4?w=600"),
         ]
         for m in materials_data:
             await db.execute(
-                "INSERT INTO materials (name, category, price_per_sqm, stock_quantity, unit, description, image_url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-                m[0], m[1], m[2], m[3], m[4], m[5], m[6], now
+                "INSERT INTO materials (name, category, category_id, price_per_sqm, stock_quantity, unit, description, image_url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], now
             )
         logger.info("Materiallar yaratildi")
 

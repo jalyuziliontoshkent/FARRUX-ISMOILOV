@@ -83,3 +83,7 @@ android-sdk/-e
 # Environment files - only block local overrides, not main .env
 *.env.local
 *.env.*.local
+-e 
+# Environment files
+*.env
+*.env.*

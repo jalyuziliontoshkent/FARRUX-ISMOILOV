@@ -14,6 +14,7 @@ export default function WorkerTasks() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('');
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const router = useRouter();
 
   const fetchTasks = useCallback(async () => {
@@ -29,8 +30,17 @@ export default function WorkerTasks() {
   useEffect(() => { fetchTasks(); }, []);
 
   const completeTask = async (orderId: string, itemIdx: number) => {
-    try { await api(`/worker/tasks/${orderId}/${itemIdx}/complete`, { method: 'PUT' }); fetchTasks(); }
-    catch (e) { console.error(e); }
+    const key = `${orderId}-${itemIdx}`;
+    if (completingIds.has(key)) return;
+    setCompletingIds(prev => new Set(prev).add(key));
+    try {
+      await api(`/worker/tasks/${orderId}/${itemIdx}/complete`, { method: 'PUT' });
+      Alert.alert('Bajarildi!', 'Vazifa muvaffaqiyatli tugallandi');
+      fetchTasks();
+    } catch (e) { console.error(e); }
+    finally {
+      setCompletingIds(prev => { const next = new Set(prev); next.delete(key); return next; });
+    }
   };
 
   const handleLogout = async () => {

@@ -46,7 +46,7 @@ export default function DealerChat() {
   useEffect(() => {
     if (adminId) {
       fetchMessages();
-      intervalRef.current = setInterval(fetchMessages, 3000);
+      intervalRef.current = setInterval(fetchMessages, 10000);
       return () => clearInterval(intervalRef.current);
     }
   }, [adminId]);
