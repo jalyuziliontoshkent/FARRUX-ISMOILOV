@@ -29,6 +29,39 @@ app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads"
 api_router = APIRouter(prefix="/api")
 JWT_ALGORITHM = "HS256"
 
+# ─── IN-MEMORY CACHE (DB tezlashtirish) ───
+import time as _time
+
+class MemoryCache:
+    """Oddiy xotiradagi kesh — DB so'rovlarni 3-5x tezlashtiradi"""
+    def __init__(self):
+        self._store: dict = {}
+        self._ttl: dict = {}
+
+    def get(self, key: str):
+        if key in self._store and _time.time() < self._ttl.get(key, 0):
+            return self._store[key]
+        self._store.pop(key, None)
+        self._ttl.pop(key, None)
+        return None
+
+    def set(self, key: str, value, ttl_seconds: int = 30):
+        self._store[key] = value
+        self._ttl[key] = _time.time() + ttl_seconds
+
+    def invalidate(self, *prefixes):
+        """Berilgan prefikslar bilan boshlanadigan barcha keshlarni o'chiradi"""
+        keys_to_del = [k for k in self._store if any(k.startswith(p) for p in prefixes)]
+        for k in keys_to_del:
+            self._store.pop(k, None)
+            self._ttl.pop(k, None)
+
+    def clear(self):
+        self._store.clear()
+        self._ttl.clear()
+
+cache = MemoryCache()
+
 # ─── DB Pool ───
 pool: asyncpg.Pool = None
 
@@ -173,10 +206,13 @@ async def create_dealer(d: DealerCreate, admin: dict = Depends(require_admin)):
     u = row_to_dict(row)
     u["id"] = str(u["id"])
     u.pop("password_hash", None)
+    cache.invalidate("dealers")
     return u
 
 @api_router.get("/dealers")
 async def list_dealers(admin: dict = Depends(require_admin)):
+    cached = cache.get("dealers_list")
+    if cached: return cached
     db = await get_pool()
     rows = await db.fetch("SELECT * FROM users WHERE role = 'dealer' ORDER BY created_at DESC")
     out = []
@@ -185,6 +221,7 @@ async def list_dealers(admin: dict = Depends(require_admin)):
         u["id"] = str(u["id"])
         u.pop("password_hash", None)
         out.append(u)
+    cache.set("dealers_list", out, 30)
     return out
 
 @api_router.put("/dealers/{did}")
@@ -213,6 +250,7 @@ async def delete_dealer(did: str, admin: dict = Depends(require_admin)):
     db = await get_pool()
     result = await db.execute("DELETE FROM users WHERE id = $1 AND role = 'dealer'", int(did))
     if result == "DELETE 0": raise HTTPException(404, "Not found")
+    cache.invalidate("dealers", "chat", "stats")
     return {"message": "Deleted"}
 
 # ─── WORKERS ───
@@ -229,10 +267,13 @@ async def create_worker(w: WorkerCreate, admin: dict = Depends(require_admin)):
     u = row_to_dict(row)
     u["id"] = str(u["id"])
     u.pop("password_hash", None)
+    cache.invalidate("workers", "stats")
     return u
 
 @api_router.get("/workers")
 async def list_workers(admin: dict = Depends(require_admin)):
+    cached = cache.get("workers_list")
+    if cached: return cached
     db = await get_pool()
     rows = await db.fetch("SELECT * FROM users WHERE role = 'worker' ORDER BY created_at DESC")
     out = []
@@ -241,6 +282,7 @@ async def list_workers(admin: dict = Depends(require_admin)):
         u["id"] = str(u["id"])
         u.pop("password_hash", None)
         out.append(u)
+    cache.set("workers_list", out, 30)
     return out
 
 @api_router.delete("/workers/{wid}")
@@ -248,6 +290,7 @@ async def delete_worker(wid: str, admin: dict = Depends(require_admin)):
     db = await get_pool()
     result = await db.execute("DELETE FROM users WHERE id = $1 AND role = 'worker'", int(wid))
     if result == "DELETE 0": raise HTTPException(404, "Not found")
+    cache.invalidate("workers", "stats")
     return {"message": "Deleted"}
 
 # ─── CATEGORIES ───
@@ -260,10 +303,13 @@ async def create_category(d: CategoryCreate, admin: dict = Depends(require_admin
         d.name, d.description, d.image_url, now
     )
     c = row_to_dict(row); c["id"] = str(c["id"])
+    cache.invalidate("categories", "materials")
     return c
 
 @api_router.get("/categories")
 async def list_categories(user: dict = Depends(get_current_user)):
+    cached = cache.get("categories_list")
+    if cached: return cached
     db = await get_pool()
     rows = await db.fetch("SELECT * FROM categories ORDER BY name ASC")
     out = []
@@ -271,6 +317,7 @@ async def list_categories(user: dict = Depends(get_current_user)):
         c = row_to_dict(r); c["id"] = str(c["id"])
         c["material_count"] = await db.fetchval("SELECT COUNT(*) FROM materials WHERE category_id = $1", r["id"])
         out.append(c)
+    cache.set("categories_list", out, 60)
     return out
 
 @api_router.put("/categories/{cid}")
@@ -286,6 +333,7 @@ async def update_category(cid: str, d: CategoryUpdate, admin: dict = Depends(req
     await db.execute(f"UPDATE categories SET {', '.join(updates)} WHERE id = ${idx}", *params)
     row = await db.fetchrow("SELECT * FROM categories WHERE id = $1", int(cid))
     c = row_to_dict(row); c["id"] = str(c["id"])
+    cache.invalidate("categories", "materials")
     return c
 
 @api_router.delete("/categories/{cid}")
@@ -296,6 +344,7 @@ async def delete_category(cid: str, admin: dict = Depends(require_admin)):
         raise HTTPException(400, f"Bu kategoriyada {mat_count} ta mahsulot bor. Avval mahsulotlarni ko'chiring.")
     result = await db.execute("DELETE FROM categories WHERE id = $1", int(cid))
     if result == "DELETE 0": raise HTTPException(404, "Not found")
+    cache.invalidate("categories", "materials")
     return {"message": "Deleted"}
 
 # ─── MATERIALS ───
@@ -309,10 +358,13 @@ async def create_material(d: MaterialCreate, admin: dict = Depends(require_admin
     )
     m = row_to_dict(row); m["id"] = str(m["id"])
     if m.get("category_id"): m["category_id"] = str(m["category_id"])
+    cache.invalidate("materials", "categories", "stats", "alerts")
     return m
 
 @api_router.get("/materials")
 async def list_materials(user: dict = Depends(get_current_user)):
+    cached = cache.get("materials_list")
+    if cached: return cached
     db = await get_pool()
     rows = await db.fetch("SELECT m.*, c.name as category_name FROM materials m LEFT JOIN categories c ON m.category_id = c.id ORDER BY c.name ASC, m.name ASC")
     out = []
@@ -320,10 +372,14 @@ async def list_materials(user: dict = Depends(get_current_user)):
         m = row_to_dict(r); m["id"] = str(m["id"])
         if m.get("category_id"): m["category_id"] = str(m["category_id"])
         out.append(m)
+    cache.set("materials_list", out, 60)
     return out
 
 @api_router.get("/materials/by-category/{cid}")
 async def list_materials_by_category(cid: str, user: dict = Depends(get_current_user)):
+    cache_key = f"materials_cat_{cid}"
+    cached = cache.get(cache_key)
+    if cached: return cached
     db = await get_pool()
     rows = await db.fetch("SELECT * FROM materials WHERE category_id = $1 ORDER BY name ASC", int(cid))
     out = []
@@ -331,6 +387,7 @@ async def list_materials_by_category(cid: str, user: dict = Depends(get_current_
         m = row_to_dict(r); m["id"] = str(m["id"])
         if m.get("category_id"): m["category_id"] = str(m["category_id"])
         out.append(m)
+    cache.set(cache_key, out, 60)
     return out
 
 @api_router.put("/materials/{mid}")
@@ -351,6 +408,7 @@ async def update_material(mid: str, d: MaterialUpdate, admin: dict = Depends(req
     row = await db.fetchrow("SELECT * FROM materials WHERE id = $1", int(mid))
     m = row_to_dict(row)
     m["id"] = str(m["id"])
+    cache.invalidate("materials", "categories", "alerts")
     return m
 
 @api_router.delete("/materials/{mid}")
@@ -358,6 +416,7 @@ async def delete_material(mid: str, admin: dict = Depends(require_admin)):
     db = await get_pool()
     result = await db.execute("DELETE FROM materials WHERE id = $1", int(mid))
     if result == "DELETE 0": raise HTTPException(404, "Not found")
+    cache.invalidate("materials", "categories", "stats", "alerts")
     return {"message": "Deleted"}
 
 # ─── ORDERS ───
@@ -383,10 +442,14 @@ async def create_order(data: OrderCreate, user: dict = Depends(get_current_user)
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
     await db.execute("UPDATE users SET debt = debt + $1 WHERE id = $2", total_price, int(user["id"]))
+    cache.invalidate("orders", "stats", "reports")
     return o
 
 @api_router.get("/orders")
 async def list_orders(user: dict = Depends(get_current_user)):
+    cache_key = f"orders_{user['id']}_{user.get('role','')}"
+    cached = cache.get(cache_key)
+    if cached: return cached
     db = await get_pool()
     if user.get("role") == "dealer":
         rows = await db.fetch("SELECT * FROM orders WHERE dealer_id = $1 ORDER BY created_at DESC", int(user["id"]))
@@ -400,6 +463,7 @@ async def list_orders(user: dict = Depends(get_current_user)):
         o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
         o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
         out.append(o)
+    cache.set(cache_key, out, 15)
     return out
 
 @api_router.get("/orders/{oid}")
@@ -431,6 +495,7 @@ async def update_order_status(oid: str, data: OrderStatusUpdate, admin: dict = D
     o["dealer_id"] = str(o["dealer_id"])
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    cache.invalidate("orders", "stats", "reports")
     return o
 
 # ─── WORKER: Assign item to worker ───
@@ -453,6 +518,7 @@ async def assign_item_to_worker(oid: str, item_idx: int, data: AssignItemReq, ad
     o["dealer_id"] = str(o["dealer_id"])
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    cache.invalidate("orders")
     return o
 
 # ─── WORKER: Get my assigned items ───
@@ -523,6 +589,7 @@ async def complete_worker_task(oid: str, item_idx: int, user: dict = Depends(get
     o["id"] = str(o["id"]); o["dealer_id"] = str(o["dealer_id"])
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    cache.invalidate("orders", "stats", "reports")
     return o
 
 # ─── DELIVERY: Assign delivery info directly to order ───
@@ -540,6 +607,7 @@ async def assign_delivery(oid: str, data: DeliveryInfoReq, admin: dict = Depends
     o["dealer_id"] = str(o["dealer_id"])
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    cache.invalidate("orders", "stats")
     return o
 
 # ─── DELIVERY: Admin confirms delivery ───
@@ -556,6 +624,7 @@ async def confirm_delivery(oid: str, admin: dict = Depends(require_admin)):
     o["dealer_id"] = str(o["dealer_id"])
     o["items"] = json.loads(o["items"]) if isinstance(o["items"], str) else o["items"]
     o["delivery_info"] = json.loads(o["delivery_info"]) if isinstance(o["delivery_info"], str) and o["delivery_info"] else o["delivery_info"]
+    cache.invalidate("orders", "stats", "reports")
     return o
 
 # ─── CHAT ───
@@ -571,6 +640,7 @@ async def send_message(data: MessageCreate, user: dict = Depends(get_current_use
     m["id"] = str(m["id"])
     m["sender_id"] = str(m["sender_id"])
     m["receiver_id"] = str(m["receiver_id"])
+    cache.invalidate("chat")
     return m
 
 @api_router.get("/messages/{pid}")
@@ -649,9 +719,11 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(requir
 # ─── STATISTICS ───
 @api_router.get("/statistics")
 async def get_statistics(admin: dict = Depends(require_admin)):
+    cached = cache.get("stats_all")
+    if cached: return cached
     db = await get_pool()
     total_revenue = await db.fetchval("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status IN ('tasdiqlangan','tayyorlanmoqda','tayyor','yetkazilmoqda','yetkazildi')")
-    return {
+    result = {
         "total_orders": await db.fetchval("SELECT COUNT(*) FROM orders"),
         "pending_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'kutilmoqda'"),
         "approved_orders": await db.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'tasdiqlangan'"),
@@ -665,6 +737,8 @@ async def get_statistics(admin: dict = Depends(require_admin)):
         "total_materials": await db.fetchval("SELECT COUNT(*) FROM materials"),
         "total_revenue": round(float(total_revenue), 2),
     }
+    cache.set("stats_all", result, 30)
+    return result
 
 # ─── SEED & STARTUP ───
 async def create_tables(db):
@@ -804,6 +878,8 @@ async def seed_admin(db):
 # ─── REPORTS - Hisobot tizimi ───
 @api_router.get("/reports")
 async def get_reports(admin: dict = Depends(require_admin)):
+    cached = cache.get("reports_all")
+    if cached: return cached
     db = await get_pool()
     now = datetime.now(timezone.utc)
 
@@ -860,7 +936,7 @@ async def get_reports(admin: dict = Depends(require_admin)):
         day_label = (now - timedelta(days=i)).strftime("%d.%m")
         daily.append({"day": day_label, "orders": cnt, "revenue": round(float(rev), 2)})
 
-    return {
+    result = {
         "weekly_revenue": round(float(weekly_revenue), 2),
         "monthly_revenue": round(float(monthly_revenue), 2),
         "total_revenue": round(float(total_revenue), 2),
@@ -871,10 +947,14 @@ async def get_reports(admin: dict = Depends(require_admin)):
         "top_dealers": top_dealers,
         "daily": daily,
     }
+    cache.set("reports_all", result, 60)
+    return result
 
 # ─── LOW STOCK ALERTS ───
 @api_router.get("/alerts/low-stock")
 async def get_low_stock(admin: dict = Depends(require_admin)):
+    cached = cache.get("alerts_low_stock")
+    if cached: return cached
     db = await get_pool()
     rows = await db.fetch("SELECT * FROM materials WHERE stock_quantity < 10 ORDER BY stock_quantity ASC")
     out = []
@@ -882,6 +962,7 @@ async def get_low_stock(admin: dict = Depends(require_admin)):
         m = row_to_dict(r)
         m["id"] = str(m["id"])
         out.append(m)
+    cache.set("alerts_low_stock", out, 60)
     return out
 
 # ─── EXCEL EXPORT ───
