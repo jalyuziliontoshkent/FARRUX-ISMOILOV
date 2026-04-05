@@ -9,12 +9,18 @@ import { useRouter } from 'expo-router';
 import {
   LogOut, TrendingUp, Clock, CheckCircle, Truck, XCircle, Zap, Users, Boxes, Wrench,
   Settings, X, AlertTriangle, Medal, Calendar, DollarSign, ShoppingCart, ArrowUpRight,
-  BarChart3, Package, ChevronRight, Award, Activity,
+  BarChart3, Package, ChevronRight, Award, Activity, Moon, Sun, RefreshCw,
 } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors, formatPrice, statusColors, statusLabels } from '../../src/utils/theme';
+import { useTheme, useCurrency } from '../../src/utils/theme';
+import { useAppStore } from '../../src/utils/store';
 
 export default function AdminDashboard() {
+  const c = useTheme();
+  const { formatPrice, currency, toggleCurrency, exchangeRate } = useCurrency();
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  const theme = useAppStore((s) => s.theme);
+
   const [stats, setStats] = useState<any>(null);
   const [reports, setReports] = useState<any>(null);
   const [lowStock, setLowStock] = useState<any[]>([]);
@@ -57,116 +63,132 @@ export default function AdminDashboard() {
   };
 
   const fmtNum = (n: number) => n.toLocaleString('en-US');
-  const fmtMoney = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtMoney = (n: number) => formatPrice(n);
 
-  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={[s.c, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color={c.accent} style={{ flex: 1 }} /></SafeAreaView>;
 
   const maxRevenue = reports?.daily ? Math.max(...reports.daily.map((d: any) => d.revenue), 1) : 1;
   const topMatMax = reports?.top_materials?.[0]?.total_price || 1;
 
   return (
-    <SafeAreaView style={s.c}>
+    <SafeAreaView style={[s.c, { backgroundColor: c.bg }]}>
       {/* Header */}
       <View style={s.header}>
         <View>
-          <Text style={s.greeting}>Assalomu alaykum</Text>
-          <Text style={s.name}>{userName}</Text>
+          <Text style={[s.greeting, { color: c.textTer }]}>Assalomu alaykum</Text>
+          <Text style={[s.name, { color: c.text }]}>{userName}</Text>
         </View>
         <View style={s.hBtns}>
-          <TouchableOpacity onPress={openProfile} style={s.hBtn}><Settings size={18} color="rgba(255,255,255,0.35)" /></TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} style={s.hBtn}><LogOut size={18} color="rgba(255,255,255,0.35)" /></TouchableOpacity>
+          {/* Currency Toggle */}
+          <TouchableOpacity onPress={toggleCurrency} style={[s.hBtn, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+            <Text style={{ fontSize: 12, fontWeight: '800', color: currency === 'USD' ? '#FFB300' : c.accent }}>{currency === 'USD' ? '$' : "so'm"}</Text>
+          </TouchableOpacity>
+          {/* Theme Toggle */}
+          <TouchableOpacity onPress={toggleTheme} style={[s.hBtn, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+            {theme === 'dark' ? <Sun size={16} color="#FFB300" /> : <Moon size={16} color={c.accent} />}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={openProfile} style={[s.hBtn, { backgroundColor: c.card, borderColor: c.cardBorder }]}><Settings size={18} color={c.textSec} /></TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={[s.hBtn, { backgroundColor: c.card, borderColor: c.cardBorder }]}><LogOut size={18} color={c.textSec} /></TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#fff" />} contentContainerStyle={s.scroll}>
+      {/* Exchange Rate Info */}
+      {currency === 'UZS' && (
+        <View style={[s.rateBar, { backgroundColor: c.accentSoft, borderColor: c.cardBorder }]}>
+          <RefreshCw size={12} color={c.accent} />
+          <Text style={{ fontSize: 11, color: c.textSec, fontWeight: '600' }}>1 USD = {exchangeRate.toLocaleString()} so'm (CBU.uz)</Text>
+        </View>
+      )}
+
+      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={c.text} />} contentContainerStyle={s.scroll}>
 
         {/* Low Stock Alert */}
         {lowStock.length > 0 && (
-          <View style={s.alert}>
-            <View style={s.alertH}><AlertTriangle size={14} color="#FF5252" /><Text style={s.alertTitle}>Material kam qoldi!</Text></View>
+          <View style={[s.alert, { backgroundColor: c.dangerSoft, borderColor: c.danger + '20' }]}>
+            <View style={s.alertH}><AlertTriangle size={14} color={c.danger} /><Text style={[s.alertTitle, { color: c.danger }]}>Material kam qoldi!</Text></View>
             {lowStock.map((m, i) => (
               <View key={i} style={s.alertRow}>
-                <Text style={s.alertName}>{m.name}</Text>
-                <Text style={[s.alertQty, m.stock_quantity < 3 && { color: '#FF5252' }]}>{m.stock_quantity} {m.unit}</Text>
+                <Text style={[s.alertName, { color: c.textSec }]}>{m.name}</Text>
+                <Text style={[s.alertQty, { color: c.warning }, m.stock_quantity < 3 && { color: c.danger }]}>{m.stock_quantity} {m.unit}</Text>
               </View>
             ))}
           </View>
         )}
 
         {/* Hero Revenue Card */}
-        <LinearGradient colors={['#1a1a2e', '#16213e']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
+        <LinearGradient colors={theme === 'dark' ? ['#1a1a2e', '#16213e'] : ['#E8EAF6', '#C5CAE9']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
           <View style={s.heroTop}>
-            <View style={s.heroIconWrap}><DollarSign size={18} color="#6C63FF" /></View>
-            <Text style={s.heroLabel}>Umumiy daromad</Text>
+            <View style={[s.heroIconWrap, { backgroundColor: c.accentSoft }]}><DollarSign size={18} color={c.accent} /></View>
+            <Text style={[s.heroLabel, { color: c.textSec }]}>Umumiy daromad</Text>
           </View>
-          <Text style={s.heroValue}>{fmtMoney(reports?.total_revenue || 0)}</Text>
-          <Text style={s.heroSub}>{fmtNum(reports?.total_orders || 0)} ta buyurtma</Text>
-          <View style={s.heroRow}>
+          <Text style={[s.heroValue, { color: c.text }]}>{fmtMoney(reports?.total_revenue || 0)}</Text>
+          <Text style={[s.heroSub, { color: c.textTer }]}>{fmtNum(reports?.total_orders || 0)} ta buyurtma</Text>
+          <View style={[s.heroRow, { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.6)' }]}>
             <View style={s.heroPill}>
-              <Calendar size={12} color="#6C63FF" />
-              <Text style={s.heroPillLabel}>Haftalik</Text>
-              <Text style={s.heroPillVal}>{fmtMoney(reports?.weekly_revenue || 0)}</Text>
+              <Calendar size={12} color={c.accent} />
+              <Text style={[s.heroPillLabel, { color: c.textTer }]}>Haftalik</Text>
+              <Text style={[s.heroPillVal, { color: c.text }]}>{fmtMoney(reports?.weekly_revenue || 0)}</Text>
             </View>
-            <View style={s.heroDivider} />
+            <View style={[s.heroDivider, { backgroundColor: c.cardBorder }]} />
             <View style={s.heroPill}>
-              <TrendingUp size={12} color="#00E676" />
-              <Text style={s.heroPillLabel}>Oylik</Text>
-              <Text style={s.heroPillVal}>{fmtMoney(reports?.monthly_revenue || 0)}</Text>
+              <TrendingUp size={12} color={c.success} />
+              <Text style={[s.heroPillLabel, { color: c.textTer }]}>Oylik</Text>
+              <Text style={[s.heroPillVal, { color: c.text }]}>{fmtMoney(reports?.monthly_revenue || 0)}</Text>
             </View>
           </View>
         </LinearGradient>
 
         {/* Order Pipeline */}
-        <View style={s.section}>
-          <View style={s.sH}><Activity size={15} color={colors.accent} /><Text style={s.sTitle}>Buyurtma holatlari</Text></View>
+        <View style={[s.section, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+          <View style={s.sH}><Activity size={15} color={c.accent} /><Text style={[s.sTitle, { color: c.textSec }]}>Buyurtma holatlari</Text></View>
           <View style={s.pipeline}>
             {[
-              { key: 'pending_orders', label: 'Kutilmoqda', icon: Clock, color: colors.warning },
-              { key: 'approved_orders', label: 'Tasdiqlangan', icon: CheckCircle, color: colors.accent },
-              { key: 'preparing_orders', label: 'Tayyorlanmoqda', icon: Zap, color: colors.blue },
-              { key: 'ready_orders', label: 'Tayyor', icon: Package, color: colors.success },
+              { key: 'pending_orders', label: 'Kutilmoqda', icon: Clock, color: c.warning },
+              { key: 'approved_orders', label: 'Tasdiqlangan', icon: CheckCircle, color: c.accent },
+              { key: 'preparing_orders', label: 'Tayyorlanmoqda', icon: Zap, color: c.blue },
+              { key: 'ready_orders', label: 'Tayyor', icon: Package, color: c.success },
               { key: 'delivering_orders', label: 'Yetkazilmoqda', icon: Truck, color: '#29B6F6' },
               { key: 'delivered_orders', label: 'Yetkazildi', icon: CheckCircle, color: '#00C853' },
             ].map((item, i) => {
               const val = stats?.[item.key] || 0;
               return (
-                <View key={i} style={s.pipeItem}>
+                <View key={i} style={[s.pipeItem, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }]}>
                   <View style={[s.pipeIcon, { backgroundColor: item.color + '15' }]}>
                     <item.icon size={16} color={item.color} />
                   </View>
-                  <Text style={[s.pipeVal, val > 0 && { color: '#fff' }]}>{val}</Text>
-                  <Text style={s.pipeLabel} numberOfLines={1}>{item.label}</Text>
+                  <Text style={[s.pipeVal, { color: c.textTer }, val > 0 && { color: c.text }]}>{val}</Text>
+                  <Text style={[s.pipeLabel, { color: c.textTer }]} numberOfLines={1}>{item.label}</Text>
                 </View>
               );
             })}
           </View>
           {(stats?.rejected_orders || 0) > 0 && (
-            <View style={s.rejectedRow}>
-              <XCircle size={14} color={colors.danger} />
-              <Text style={s.rejectedText}>Rad etilgan: <Text style={{ fontWeight: '800' }}>{stats.rejected_orders}</Text></Text>
+            <View style={[s.rejectedRow, { borderTopColor: c.cardBorder }]}>
+              <XCircle size={14} color={c.danger} />
+              <Text style={{ fontSize: 12, color: c.danger }}>Rad etilgan: <Text style={{ fontWeight: '800' }}>{stats.rejected_orders}</Text></Text>
             </View>
           )}
         </View>
 
         {/* 7-Day Chart */}
         {reports?.daily && (
-          <View style={s.section}>
-            <View style={s.sH}><BarChart3 size={15} color={colors.accent} /><Text style={s.sTitle}>Oxirgi 7 kun</Text></View>
+          <View style={[s.section, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+            <View style={s.sH}><BarChart3 size={15} color={c.accent} /><Text style={[s.sTitle, { color: c.textSec }]}>Oxirgi 7 kun</Text></View>
             <View style={s.chart}>
               {reports.daily.map((d: any, i: number) => {
                 const barH = Math.max((d.revenue / maxRevenue) * 100, 4);
                 const hasData = d.revenue > 0;
                 return (
                   <View key={i} style={s.chartCol}>
-                    {hasData && <Text style={s.chartMoney}>{fmtMoney(d.revenue)}</Text>}
-                    <Text style={s.chartCount}>{d.orders}</Text>
-                    <View style={s.chartBarBg}>
+                    {hasData && <Text style={[s.chartMoney, { color: c.accent + 'CC' }]}>{fmtMoney(d.revenue)}</Text>}
+                    <Text style={[s.chartCount, { color: c.textTer }]}>{d.orders}</Text>
+                    <View style={[s.chartBarBg, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.04)' }]}>
                       <LinearGradient
-                        colors={hasData ? ['#6C63FF', '#4A43CC'] : ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.03)']}
+                        colors={hasData ? ['#6C63FF', '#4A43CC'] : [theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)']}
                         style={[s.chartBar, { height: barH }]}
                       />
                     </View>
-                    <Text style={[s.chartDay, hasData && { color: 'rgba(255,255,255,0.5)' }]}>{d.day}</Text>
+                    <Text style={[s.chartDay, { color: c.textTer }, hasData && { color: c.textSec }]}>{d.day}</Text>
                   </View>
                 );
               })}
@@ -176,26 +198,26 @@ export default function AdminDashboard() {
 
         {/* Top Materials */}
         {reports?.top_materials?.length > 0 && (
-          <View style={s.section}>
-            <View style={s.sH}><Award size={15} color="#FFB300" /><Text style={s.sTitle}>Eng ko'p sotilgan materiallar</Text></View>
+          <View style={[s.section, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+            <View style={s.sH}><Award size={15} color="#FFB300" /><Text style={[s.sTitle, { color: c.textSec }]}>Eng ko'p sotilgan materiallar</Text></View>
             {reports.top_materials.map((m: any, i: number) => {
               const pct = (m.total_price / topMatMax) * 100;
-              const rankColors = ['#FFB300', '#C0C0C0', '#CD7F32', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.2)'];
+              const rankColors = ['#FFB300', '#C0C0C0', '#CD7F32', c.textTer, c.textTer];
               return (
-                <View key={i} style={s.topItem}>
+                <View key={i} style={[s.topItem, { borderBottomColor: c.cardBorder }]}>
                   <View style={s.topLeft}>
-                    <View style={[s.topRank, i < 3 && { borderColor: rankColors[i], borderWidth: 1.5 }]}>
-                      <Text style={[s.topRankNum, i < 3 && { color: rankColors[i] }]}>{i + 1}</Text>
+                    <View style={[s.topRank, { backgroundColor: c.card }, i < 3 && { borderColor: rankColors[i], borderWidth: 1.5 }]}>
+                      <Text style={[s.topRankNum, { color: c.textTer }, i < 3 && { color: rankColors[i] }]}>{i + 1}</Text>
                     </View>
                     <View style={s.topInfo}>
-                      <Text style={s.topName} numberOfLines={1}>{m.name}</Text>
-                      <Text style={s.topMeta}>{m.count} dona · {m.total_sqm.toFixed(1)} kv.m</Text>
+                      <Text style={[s.topName, { color: c.text }]} numberOfLines={1}>{m.name}</Text>
+                      <Text style={[s.topMeta, { color: c.textTer }]}>{m.count} dona · {m.total_sqm.toFixed(1)} kv.m</Text>
                     </View>
                   </View>
                   <View style={s.topRight}>
-                    <Text style={s.topPrice}>{fmtMoney(Math.round(m.total_price * 100) / 100)}</Text>
-                    <View style={s.topBarBg}>
-                      <View style={[s.topBar, { width: `${pct}%` }]} />
+                    <Text style={[s.topPrice, { color: c.text }]}>{fmtMoney(Math.round(m.total_price * 100) / 100)}</Text>
+                    <View style={[s.topBarBg, { backgroundColor: c.cardBorder }]}>
+                      <View style={[s.topBar, { width: `${pct}%`, backgroundColor: c.accent }]} />
                     </View>
                   </View>
                 </View>
@@ -206,16 +228,16 @@ export default function AdminDashboard() {
 
         {/* Top Dealers */}
         {reports?.top_dealers?.length > 0 && (
-          <View style={s.section}>
-            <View style={s.sH}><Users size={15} color={colors.accent} /><Text style={s.sTitle}>Top dilerlar</Text></View>
+          <View style={[s.section, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+            <View style={s.sH}><Users size={15} color={c.accent} /><Text style={[s.sTitle, { color: c.textSec }]}>Top dilerlar</Text></View>
             {reports.top_dealers.map((d: any, i: number) => (
-              <View key={i} style={s.dealerItem}>
-                <View style={s.dealerAvatar}><Text style={s.dealerAvatarText}>{d.name.charAt(0).toUpperCase()}</Text></View>
+              <View key={i} style={[s.dealerItem, { borderBottomColor: c.cardBorder }]}>
+                <View style={[s.dealerAvatar, { backgroundColor: c.accentSoft }]}><Text style={[s.dealerAvatarText, { color: c.accent }]}>{d.name.charAt(0).toUpperCase()}</Text></View>
                 <View style={s.dealerInfo}>
-                  <Text style={s.dealerName}>{d.name}</Text>
-                  <Text style={s.dealerOrders}>{d.orders} ta buyurtma</Text>
+                  <Text style={[s.dealerName, { color: c.text }]}>{d.name}</Text>
+                  <Text style={[s.dealerOrders, { color: c.textTer }]}>{d.orders} ta buyurtma</Text>
                 </View>
-                <Text style={s.dealerRev}>{fmtMoney(d.revenue)}</Text>
+                <Text style={[s.dealerRev, { color: c.text }]}>{fmtMoney(d.revenue)}</Text>
               </View>
             ))}
           </View>
@@ -224,15 +246,15 @@ export default function AdminDashboard() {
         {/* Quick Stats Grid */}
         <View style={s.qGrid}>
           {[
-            { icon: ShoppingCart, val: fmtNum(stats?.total_orders || 0), label: 'Jami buyurtma', color: colors.accent },
-            { icon: Users, val: fmtNum(stats?.total_dealers || 0), label: 'Dilerlar', color: '#29B6F6' },
-            { icon: Wrench, val: fmtNum(stats?.total_workers || 0), label: 'Ishchilar', color: '#FFB300' },
-            { icon: Boxes, val: fmtNum(stats?.total_materials || 0), label: 'Materiallar', color: '#00E676' },
-          ].map((c, i) => (
-            <View key={i} style={s.qCard}>
-              <View style={[s.qIcon, { backgroundColor: c.color + '12' }]}><c.icon size={18} color={c.color} /></View>
-              <Text style={s.qVal}>{c.val}</Text>
-              <Text style={s.qLabel}>{c.label}</Text>
+            { icon: ShoppingCart, val: fmtNum(stats?.total_orders || 0), label: 'Jami buyurtma', clr: c.accent },
+            { icon: Users, val: fmtNum(stats?.total_dealers || 0), label: 'Dilerlar', clr: '#29B6F6' },
+            { icon: Wrench, val: fmtNum(stats?.total_workers || 0), label: 'Ishchilar', clr: '#FFB300' },
+            { icon: Boxes, val: fmtNum(stats?.total_materials || 0), label: 'Materiallar', clr: '#00E676' },
+          ].map((item, i) => (
+            <View key={i} style={[s.qCard, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+              <View style={[s.qIcon, { backgroundColor: item.clr + '12' }]}><item.icon size={18} color={item.clr} /></View>
+              <Text style={[s.qVal, { color: c.text }]}>{item.val}</Text>
+              <Text style={[s.qLabel, { color: c.textTer }]}>{item.label}</Text>
             </View>
           ))}
         </View>
@@ -242,18 +264,18 @@ export default function AdminDashboard() {
 
       {/* Profile Modal */}
       <Modal visible={showProfile} transparent animationType="slide">
-        <View style={s.modalBg}><View style={s.modal}>
-          <View style={s.modalH}><Text style={s.modalTitle}>Profil sozlamalari</Text><TouchableOpacity onPress={() => setShowProfile(false)}><X size={22} color="rgba(255,255,255,0.4)" /></TouchableOpacity></View>
+        <View style={s.modalBg}><View style={[s.modal, { backgroundColor: c.modalBg, borderColor: c.cardBorder }]}>
+          <View style={[s.modalH, { borderBottomColor: c.cardBorder }]}><Text style={[s.modalTitle, { color: c.text }]}>Profil sozlamalari</Text><TouchableOpacity onPress={() => setShowProfile(false)}><X size={22} color={c.textSec} /></TouchableOpacity></View>
           <ScrollView style={s.modalBody}>
-            {profileMsg ? <View style={s.okBox}><Text style={s.okText}>{profileMsg}</Text></View> : null}
-            {profileErr ? <View style={s.errBox}><Text style={s.errText}>{profileErr}</Text></View> : null}
-            <Text style={s.label}>Yangi Email</Text>
-            <TextInput style={s.input} value={profileForm.email} onChangeText={v => setProfileForm({...profileForm, email: v})} placeholder="email@..." placeholderTextColor="rgba(255,255,255,0.2)" autoCapitalize="none" keyboardType="email-address" />
-            <Text style={s.label}>Yangi Parol</Text>
-            <TextInput style={s.input} value={profileForm.password} onChangeText={v => setProfileForm({...profileForm, password: v})} placeholder="Yangi parol" placeholderTextColor="rgba(255,255,255,0.2)" secureTextEntry />
-            <Text style={[s.label, { marginTop: 24, color: colors.warning }]}>Joriy Parol (majburiy)</Text>
-            <TextInput style={[s.input, { borderColor: 'rgba(255,179,0,0.3)' }]} value={profileForm.current_password} onChangeText={v => setProfileForm({...profileForm, current_password: v})} placeholder="Joriy parol" placeholderTextColor="rgba(255,255,255,0.2)" secureTextEntry />
-            <TouchableOpacity style={s.saveBtn} onPress={saveProfile} disabled={profileLoading}>
+            {profileMsg ? <View style={[s.okBox, { backgroundColor: c.successSoft, borderColor: c.success + '25' }]}><Text style={[s.okText, { color: c.success }]}>{profileMsg}</Text></View> : null}
+            {profileErr ? <View style={[s.errBox, { backgroundColor: c.dangerSoft, borderColor: c.danger + '25' }]}><Text style={[s.errText, { color: c.danger }]}>{profileErr}</Text></View> : null}
+            <Text style={[s.label, { color: c.textSec }]}>Yangi Email</Text>
+            <TextInput style={[s.input, { backgroundColor: c.inputBg, borderColor: c.inputBorder, color: c.text }]} value={profileForm.email} onChangeText={v => setProfileForm({...profileForm, email: v})} placeholder="email@..." placeholderTextColor={c.placeholder} autoCapitalize="none" keyboardType="email-address" />
+            <Text style={[s.label, { color: c.textSec }]}>Yangi Parol</Text>
+            <TextInput style={[s.input, { backgroundColor: c.inputBg, borderColor: c.inputBorder, color: c.text }]} value={profileForm.password} onChangeText={v => setProfileForm({...profileForm, password: v})} placeholder="Yangi parol" placeholderTextColor={c.placeholder} secureTextEntry />
+            <Text style={[s.label, { marginTop: 24, color: c.warning }]}>Joriy Parol (majburiy)</Text>
+            <TextInput style={[s.input, { backgroundColor: c.inputBg, borderColor: c.warning + '30', color: c.text }]} value={profileForm.current_password} onChangeText={v => setProfileForm({...profileForm, current_password: v})} placeholder="Joriy parol" placeholderTextColor={c.placeholder} secureTextEntry />
+            <TouchableOpacity style={[s.saveBtn, { backgroundColor: c.accent }]} onPress={saveProfile} disabled={profileLoading}>
               {profileLoading ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Saqlash</Text>}
             </TouchableOpacity>
           </ScrollView>
@@ -264,102 +286,81 @@ export default function AdminDashboard() {
 }
 
 const s = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
-
-  // Header
+  c: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 },
-  greeting: { fontSize: 12, color: 'rgba(255,255,255,0.3)', fontWeight: '500', letterSpacing: 0.5 },
-  name: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.5, marginTop: 1 },
+  greeting: { fontSize: 12, fontWeight: '500', letterSpacing: 0.5 },
+  name: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginTop: 1 },
   hBtns: { flexDirection: 'row', gap: 6 },
-  hBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-
+  hBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  rateBar: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, marginBottom: 4 },
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
-
-  // Alert
-  alert: { backgroundColor: 'rgba(255,82,82,0.05)', borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,82,82,0.1)' },
+  alert: { borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1 },
   alertH: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  alertTitle: { fontSize: 11, fontWeight: '700', color: '#FF5252', textTransform: 'uppercase', letterSpacing: 1 },
+  alertTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   alertRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  alertName: { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
-  alertQty: { fontSize: 13, fontWeight: '700', color: '#FFB300' },
-
-  // Hero
+  alertName: { fontSize: 13 },
+  alertQty: { fontSize: 13, fontWeight: '700' },
   hero: { borderRadius: 24, padding: 22, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(108,99,255,0.1)' },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  heroIconWrap: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(108,99,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  heroLabel: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  heroValue: { fontSize: 36, fontWeight: '800', color: '#fff', letterSpacing: -1, marginBottom: 2 },
-  heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 16 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 16, padding: 14 },
+  heroIconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  heroLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
+  heroValue: { fontSize: 34, fontWeight: '800', letterSpacing: -1, marginBottom: 2 },
+  heroSub: { fontSize: 13, marginBottom: 16 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 14 },
   heroPill: { flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4 },
-  heroPillLabel: { fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  heroPillVal: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  heroDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.06)' },
-
-  // Section
-  section: { backgroundColor: 'rgba(255,255,255,0.025)', borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  heroPillLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  heroPillVal: { fontSize: 15, fontWeight: '800' },
+  heroDivider: { width: 1, height: 30 },
+  section: { borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 1 },
   sH: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  sTitle: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  // Pipeline
+  sTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   pipeline: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  pipeItem: { width: '31%', flexGrow: 1, alignItems: 'center', paddingVertical: 12, backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 14, gap: 6 },
+  pipeItem: { width: '31%', flexGrow: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 14, gap: 6 },
   pipeIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  pipeVal: { fontSize: 22, fontWeight: '800', color: 'rgba(255,255,255,0.25)', fontVariant: ['tabular-nums'] },
-  pipeLabel: { fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  rejectedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.04)' },
-  rejectedText: { fontSize: 12, color: colors.danger },
-
-  // Chart
+  pipeVal: { fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  pipeLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  rejectedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
   chart: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 160, gap: 4 },
   chartCol: { flex: 1, alignItems: 'center', gap: 3 },
-  chartMoney: { fontSize: 8, color: 'rgba(108,99,255,0.8)', fontWeight: '700', fontVariant: ['tabular-nums'] },
-  chartCount: { fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: '700', fontVariant: ['tabular-nums'] },
-  chartBarBg: { width: '100%', maxWidth: 28, height: 100, justifyContent: 'flex-end', borderRadius: 14, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.02)' },
+  chartMoney: { fontSize: 8, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  chartCount: { fontSize: 10, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  chartBarBg: { width: '100%', maxWidth: 28, height: 100, justifyContent: 'flex-end', borderRadius: 14, overflow: 'hidden' },
   chartBar: { width: '100%', borderRadius: 14, minHeight: 4 },
-  chartDay: { fontSize: 9, color: 'rgba(255,255,255,0.2)', fontWeight: '600', fontVariant: ['tabular-nums'], marginTop: 2 },
-
-  // Top Materials
-  topItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.03)' },
+  chartDay: { fontSize: 9, fontWeight: '600', fontVariant: ['tabular-nums'], marginTop: 2 },
+  topItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
   topLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  topRank: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.03)', alignItems: 'center', justifyContent: 'center' },
-  topRankNum: { fontSize: 12, fontWeight: '800', color: 'rgba(255,255,255,0.25)', fontVariant: ['tabular-nums'] },
+  topRank: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  topRankNum: { fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
   topInfo: { flex: 1 },
-  topName: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  topMeta: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2, fontVariant: ['tabular-nums'] },
+  topName: { fontSize: 14, fontWeight: '600' },
+  topMeta: { fontSize: 11, marginTop: 2, fontVariant: ['tabular-nums'] },
   topRight: { alignItems: 'flex-end', minWidth: 90 },
-  topPrice: { fontSize: 14, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] },
-  topBarBg: { width: 80, height: 3, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 2, marginTop: 6, overflow: 'hidden' },
-  topBar: { height: '100%', backgroundColor: '#6C63FF', borderRadius: 2 },
-
-  // Dealers
-  dealerItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.03)' },
-  dealerAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(108,99,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-  dealerAvatarText: { fontSize: 16, fontWeight: '800', color: colors.accent },
+  topPrice: { fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  topBarBg: { width: 80, height: 3, borderRadius: 2, marginTop: 6, overflow: 'hidden' },
+  topBar: { height: '100%', borderRadius: 2 },
+  dealerItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1 },
+  dealerAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  dealerAvatarText: { fontSize: 16, fontWeight: '800' },
   dealerInfo: { flex: 1 },
-  dealerName: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  dealerOrders: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2, fontVariant: ['tabular-nums'] },
-  dealerRev: { fontSize: 15, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] },
-
-  // Quick Grid
+  dealerName: { fontSize: 14, fontWeight: '600' },
+  dealerOrders: { fontSize: 11, marginTop: 2, fontVariant: ['tabular-nums'] },
+  dealerRev: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
   qGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  qCard: { width: '48%', flexGrow: 1, backgroundColor: 'rgba(255,255,255,0.025)', borderRadius: 18, padding: 16, gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
+  qCard: { width: '48%', flexGrow: 1, borderRadius: 18, padding: 16, gap: 8, borderWidth: 1 },
   qIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  qVal: { fontSize: 28, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] },
-  qLabel: { fontSize: 10, color: 'rgba(255,255,255,0.3)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  // Modal
+  qVal: { fontSize: 28, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  qLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: '#0a0a0f', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', maxHeight: '80%' },
-  modalH: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 22, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  modal: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '80%' },
+  modalH: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 22, borderBottomWidth: 1 },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
   modalBody: { padding: 22, paddingBottom: 40 },
-  label: { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 6, marginTop: 14, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
-  input: { height: 50, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 16, fontSize: 15, color: '#fff' },
-  saveBtn: { height: 52, backgroundColor: colors.accent, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
+  label: { fontSize: 10, marginBottom: 6, marginTop: 14, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
+  input: { height: 50, borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, fontSize: 15 },
+  saveBtn: { height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   saveBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  okBox: { backgroundColor: 'rgba(0,230,118,0.06)', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(0,230,118,0.15)' },
-  okText: { color: colors.success, fontSize: 13, textAlign: 'center', fontWeight: '600' },
-  errBox: { backgroundColor: 'rgba(255,82,82,0.06)', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,82,82,0.15)' },
-  errText: { color: colors.danger, fontSize: 13, textAlign: 'center' },
+  okBox: { borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1 },
+  okText: { fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  errBox: { borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1 },
+  errText: { fontSize: 13, textAlign: 'center' },
 });

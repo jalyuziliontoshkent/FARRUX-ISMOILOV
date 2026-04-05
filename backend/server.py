@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 import asyncpg, aiofiles, uuid, asyncio, io
 import os, logging, bcrypt, jwt, secrets, string, json
+import httpx
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
@@ -135,6 +136,28 @@ class OrderStatusUpdate(BaseModel): status: str; rejection_reason: str = ""
 class MessageCreate(BaseModel): receiver_id: str; text: str
 class AssignItemReq(BaseModel): worker_id: str
 class DeliveryInfoReq(BaseModel): driver_name: str; driver_phone: str; plate_number: str = ""
+class PaymentCreate(BaseModel): amount: float; note: str = ""
+
+# ─── EXCHANGE RATE (Real-time USD/UZS) ───
+@api_router.get("/exchange-rate")
+async def get_exchange_rate():
+    """O'zbekiston Markaziy Banki dan real vaqtda dollar kursini olish"""
+    cached = cache.get("exchange_rate")
+    if cached: return cached
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get("https://cbu.uz/oz/arkhiv-kursov-valyut/json/USD/")
+            data = resp.json()
+            if data and len(data) > 0:
+                rate = float(data[0]["Rate"])
+                result = {"rate": rate, "currency": "UZS", "date": data[0].get("Date", ""), "source": "CBU.uz"}
+                cache.set("exchange_rate", result, 3600)
+                return result
+    except Exception as e:
+        logger.warning(f"CBU kurs olishda xatolik: {e}")
+    fallback = {"rate": 12800.0, "currency": "UZS", "date": "", "source": "fallback"}
+    cache.set("exchange_rate", fallback, 300)
+    return fallback
 
 # ─── AUTH ───
 @api_router.post("/auth/login")
@@ -814,6 +837,15 @@ async def create_tables(db):
             created_at TEXT DEFAULT ''
         )
     """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id SERIAL PRIMARY KEY,
+            dealer_id INTEGER REFERENCES users(id),
+            amount FLOAT NOT NULL DEFAULT 0,
+            note TEXT DEFAULT '',
+            created_at TEXT DEFAULT ''
+        )
+    """)
 
 async def seed_admin(db):
     email = os.environ.get("ADMIN_EMAIL", "admin@curtain.uz")
@@ -1026,6 +1058,35 @@ async def export_orders_excel(admin: dict = Depends(require_admin)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=buyurtmalar_{today}.xlsx"}
     )
+
+# ─── DEALER PAYMENTS (To'lovlar) ───
+@api_router.post("/dealers/{did}/payment")
+async def add_dealer_payment(did: str, data: PaymentCreate, admin: dict = Depends(require_admin)):
+    if data.amount <= 0: raise HTTPException(400, "Summa 0 dan katta bo'lishi kerak")
+    db = await get_pool()
+    dealer = await db.fetchrow("SELECT * FROM users WHERE id = $1 AND role = 'dealer'", int(did))
+    if not dealer: raise HTTPException(404, "Diler topilmadi")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute(
+        "INSERT INTO payments (dealer_id, amount, note, created_at) VALUES ($1,$2,$3,$4)",
+        int(did), data.amount, data.note, now
+    )
+    new_debt = max(0, (dealer["debt"] or 0) - data.amount)
+    await db.execute("UPDATE users SET debt = $1 WHERE id = $2", new_debt, int(did))
+    cache.invalidate("dealers", "stats")
+    return {"message": "To'lov qabul qilindi", "new_debt": round(new_debt, 2), "paid": data.amount}
+
+@api_router.get("/dealers/{did}/payments")
+async def get_dealer_payments(did: str, admin: dict = Depends(require_admin)):
+    db = await get_pool()
+    rows = await db.fetch("SELECT * FROM payments WHERE dealer_id = $1 ORDER BY created_at DESC", int(did))
+    out = []
+    for r in rows:
+        p = row_to_dict(r)
+        p["id"] = str(p["id"])
+        p["dealer_id"] = str(p["dealer_id"])
+        out.append(p)
+    return out
 
 # ─── HEALTH CHECK ───
 @api_router.get("/health")

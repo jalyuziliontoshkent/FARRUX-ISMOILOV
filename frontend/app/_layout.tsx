@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAppStore } from '../src/utils/store';
 
 export type UserType = {
   id: string;
@@ -42,6 +43,13 @@ export default function RootLayout() {
 
   const checkAuth = useCallback(async () => {
     try {
+      // Load theme & currency settings
+      await useAppStore.getState().loadSettings();
+      // Fetch exchange rate
+      try {
+        const rateData = await api('/exchange-rate');
+        if (rateData?.rate) useAppStore.getState().setExchangeRate(rateData.rate);
+      } catch {}
       const token = await AsyncStorage.getItem('token');
       const userStr = await AsyncStorage.getItem('user');
       if (token && userStr) {
