@@ -6,10 +6,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors } from '../../src/utils/theme';
+import { useTheme } from '../../src/utils/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DealerChat() {
+  const c = useTheme();
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -125,7 +126,7 @@ export default function DealerChat() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: c.bg },
   chatHeader: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)', gap: 14,

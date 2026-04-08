@@ -8,11 +8,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowRight } from 'lucide-react-native';
 import { api } from './_layout';
-import { colors } from '../src/utils/theme';
+import { useTheme } from '../src/utils/theme';
 
 const LOGO_URL = 'https://customer-assets.emergentagent.com/job_dealer-dashboard-21/artifacts/g266jqxu_image.png';
 
 export default function Login() {
+  const c = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -79,12 +80,12 @@ export default function Login() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: c.bg },
   safe: { flex: 1 },
   content: { alignItems: 'center', paddingHorizontal: 32 },
   logo: { width: 200, height: 100, marginBottom: 48 },
   form: { width: '100%', gap: 12 },
-  error: { color: colors.danger, fontSize: 13, textAlign: 'center', marginBottom: 4 },
+  error: { color: c.danger, fontSize: 13, textAlign: 'center', marginBottom: 4 },
   input: { height: 56, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 20, fontSize: 16, color: '#fff' },
   btn: { borderRadius: 18, overflow: 'hidden', marginTop: 8 },
   btnGrad: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

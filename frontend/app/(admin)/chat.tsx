@@ -6,10 +6,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors } from '../../src/utils/theme';
+import { useTheme } from '../../src/utils/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function AdminChat() {
+  const c = useTheme();
   const [partners, setPartners] = useState<any[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
@@ -61,7 +62,7 @@ export default function AdminChat() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color="#fff" style={{ flex: 1 }} />
       </SafeAreaView>
     );
@@ -173,7 +174,7 @@ export default function AdminChat() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1 },
   title: { fontSize: 24, fontWeight: '300', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
   partnerList: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
   emptyState: { alignItems: 'center', paddingTop: 80 },

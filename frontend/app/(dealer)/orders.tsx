@@ -5,9 +5,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Package, Truck, Phone, Hash } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors, statusColors, statusLabels, formatPrice } from '../../src/utils/theme';
+import { useTheme, useCurrency, statusLabels } from '../../src/utils/theme';
 
 export default function DealerOrders() {
+  const c = useTheme();
+  const { formatPrice } = useCurrency();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -26,7 +28,7 @@ export default function DealerOrders() {
     <SafeAreaView style={s.container}>
       <Text style={s.title}>Buyurtmalarim</Text>
       {loading ? (
-        <ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} />
+        <ActivityIndicator size="large" color={c.accent} style={{ flex: 1 }} />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -42,7 +44,7 @@ export default function DealerOrders() {
             <View key={order.id} style={s.orderCard} testID={`my-order-${order.id}`}>
               <View style={s.orderHeader}>
                 <View style={s.codeSection}>
-                  <Hash size={13} color={colors.accent} />
+                  <Hash size={13} color={c.accent} />
                   <Text style={s.codeText}>{order.order_code}</Text>
                 </View>
                 <View style={[s.statusBadge, { backgroundColor: (statusColors[order.status] || '#fff') + '18' }]}>
@@ -58,8 +60,8 @@ export default function DealerOrders() {
                   const active = i <= idx && order.status !== 'rad_etilgan';
                   return (
                     <View key={st} style={s.trackerStep}>
-                      <View style={[s.trackerDot, active && { backgroundColor: colors.accent }]} />
-                      {i < allStatuses.length - 1 && <View style={[s.trackerLine, active && { backgroundColor: colors.accent + '50' }]} />}
+                      <View style={[s.trackerDot, active && { backgroundColor: c.accent }]} />
+                      {i < allStatuses.length - 1 && <View style={[s.trackerLine, active && { backgroundColor: c.accent + '50' }]} />}
                     </View>
                   );
                 })}
@@ -69,7 +71,7 @@ export default function DealerOrders() {
               ) : null}
               {order.delivery_info && (
                 <View style={s.deliveryCard}>
-                  <Truck size={16} color={colors.blue} />
+                  <Truck size={16} color={c.blue} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.deliveryTitle}>Yetkazish</Text>
                     <Text style={s.deliveryDriver}>{order.delivery_info.driver_name}</Text>
@@ -100,35 +102,35 @@ export default function DealerOrders() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: c.bg },
   title: { fontSize: 26, fontWeight: '800', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
   emptyState: { alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { fontSize: 16, color: colors.textTer },
-  orderCard: { backgroundColor: colors.card, borderRadius: 22, borderWidth: 1, borderColor: colors.cardBorder, padding: 18, marginBottom: 14 },
+  emptyText: { fontSize: 16, color: c.textTer },
+  orderCard: { backgroundColor: c.card, borderRadius: 22, borderWidth: 1, borderColor: c.cardBorder, padding: 18, marginBottom: 14 },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  codeSection: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.accentSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  codeText: { fontSize: 14, fontWeight: '800', color: colors.accent, letterSpacing: 1.5, fontVariant: ['tabular-nums'] },
+  codeSection: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.accentSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  codeText: { fontSize: 14, fontWeight: '800', color: c.accent, letterSpacing: 1.5, fontVariant: ['tabular-nums'] },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, gap: 5 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  orderDate: { fontSize: 12, color: colors.textTer, marginTop: 8 },
+  orderDate: { fontSize: 12, color: c.textTer, marginTop: 8 },
   tracker: { flexDirection: 'row', alignItems: 'center', marginVertical: 14, paddingHorizontal: 4 },
   trackerStep: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   trackerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.08)' },
   trackerLine: { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.04)', marginHorizontal: 2 },
-  rejectBox: { backgroundColor: colors.dangerSoft, borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)' },
-  rejectText: { fontSize: 12, color: colors.danger },
-  deliveryCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.blueSoft, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(68,138,255,0.15)' },
+  rejectBox: { backgroundColor: c.dangerSoft, borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,82,82,0.2)' },
+  rejectText: { fontSize: 12, color: c.danger },
+  deliveryCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.blueSoft, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(68,138,255,0.15)' },
   deliveryTitle: { fontSize: 10, color: 'rgba(68,138,255,0.7)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   deliveryDriver: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  deliveryPlate: { fontSize: 12, color: colors.textSec, marginTop: 1 },
+  deliveryPlate: { fontSize: 12, color: c.textSec, marginTop: 1 },
   callBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   callText: { fontSize: 11, color: '#fff' },
   itemRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
   itemName: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  itemDetail: { fontSize: 12, color: colors.textSec, marginTop: 2 },
+  itemDetail: { fontSize: 12, color: c.textSec, marginTop: 2 },
   orderFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
-  orderTotal: { fontSize: 13, color: colors.textSec },
+  orderTotal: { fontSize: 13, color: c.textSec },
   orderPrice: { fontSize: 18, fontWeight: '800', color: '#fff' },
 });

@@ -7,9 +7,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { LogOut, Hash, CheckCircle, Ruler, Package } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors } from '../../src/utils/theme';
+import { useTheme } from '../../src/utils/theme';
 
 export default function WorkerTasks() {
+  const c = useTheme();
+  const { formatPrice } = useCurrency();
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +50,7 @@ export default function WorkerTasks() {
     router.replace('/');
   };
 
-  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={c.accent} style={{ flex: 1 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.c}>
@@ -76,12 +78,12 @@ export default function WorkerTasks() {
         ) : tasks.map((task, i) => (
           <View key={`${task.order_id}-${task.item_index}`} style={s.taskCard} testID={`task-${i}`}>
             <View style={s.taskHead}>
-              <View style={s.codeBadge}><Hash size={11} color={colors.accent} /><Text style={s.codeText}>{task.order_code}</Text></View>
+              <View style={s.codeBadge}><Hash size={11} color={c.accent} /><Text style={s.codeText}>{task.order_code}</Text></View>
               <Text style={s.taskDealer}>{task.dealer_name}</Text>
             </View>
             <Text style={s.materialName}>{task.material_name}</Text>
             <View style={s.sizeRow}>
-              <Ruler size={14} color={colors.textSec} />
+              <Ruler size={14} color={c.textSec} />
               <Text style={s.sizeText}>{task.width}m x {task.height}m = {task.sqm} kv.m</Text>
             </View>
             {task.notes ? <Text style={s.notes}>{task.notes}</Text> : null}
@@ -97,27 +99,27 @@ export default function WorkerTasks() {
 }
 
 const s = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
+  c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
-  hi: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
+  hi: { fontSize: 13, color: c.textSec, fontWeight: '500' },
   name: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
+  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.cardBorder },
   countRow: { paddingHorizontal: 24, marginBottom: 8 },
-  countCard: { backgroundColor: colors.accentSoft, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: 'rgba(108,99,255,0.15)' },
-  countVal: { fontSize: 32, fontWeight: '800', color: colors.accent },
-  countLabel: { fontSize: 12, color: colors.textSec, fontWeight: '600', marginTop: 2 },
+  countCard: { backgroundColor: c.accentSoft, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: 'rgba(108,99,255,0.15)' },
+  countVal: { fontSize: 32, fontWeight: '800', color: c.accent },
+  countLabel: { fontSize: 12, color: c.textSec, fontWeight: '600', marginTop: 2 },
   scroll: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 100 },
   empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: 15, color: colors.textTer },
-  taskCard: { backgroundColor: colors.card, borderRadius: 22, borderWidth: 1, borderColor: colors.cardBorder, padding: 18, marginBottom: 14 },
+  emptyText: { fontSize: 15, color: c.textTer },
+  taskCard: { backgroundColor: c.card, borderRadius: 22, borderWidth: 1, borderColor: c.cardBorder, padding: 18, marginBottom: 14 },
   taskHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  codeText: { fontSize: 12, fontWeight: '800', color: colors.accent, letterSpacing: 1, fontVariant: ['tabular-nums'] },
-  taskDealer: { fontSize: 12, color: colors.textSec },
+  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.accentSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  codeText: { fontSize: 12, fontWeight: '800', color: c.accent, letterSpacing: 1, fontVariant: ['tabular-nums'] },
+  taskDealer: { fontSize: 12, color: c.textSec },
   materialName: { fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 8 },
   sizeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sizeText: { fontSize: 14, color: colors.textSec },
-  notes: { fontSize: 13, color: colors.textTer, marginTop: 8, fontStyle: 'italic' },
-  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, backgroundColor: colors.success, borderRadius: 26, marginTop: 16 },
+  sizeText: { fontSize: 14, color: c.textSec },
+  notes: { fontSize: 13, color: c.textTer, marginTop: 8, fontStyle: 'italic' },
+  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, backgroundColor: c.success, borderRadius: 26, marginTop: 16 },
   completeBtnText: { fontSize: 15, fontWeight: '700', color: '#000' },
 });

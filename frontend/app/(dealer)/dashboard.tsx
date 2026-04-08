@@ -11,6 +11,8 @@ import { api } from '../_layout';
 import { colors, formatPrice, statusColors, statusLabels } from '../../src/utils/theme';
 
 export default function DealerDashboard() {
+  const c = useTheme();
+  const { formatPrice } = useCurrency();
   const [orders, setOrders] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export default function DealerDashboard() {
     router.replace('/');
   };
 
-  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={c.accent} style={{ flex: 1 }} /></SafeAreaView>;
 
   const pending = orders.filter(o => o.status === 'kutilmoqda').length;
   const preparing = orders.filter(o => ['tayyorlanmoqda','tayyor'].includes(o.status)).length;
@@ -66,7 +68,7 @@ export default function DealerDashboard() {
               <View style={s.creditDiv} />
               <View style={s.creditItem}>
                 <Text style={s.creditLabel}>Qarz</Text>
-                <Text style={[s.creditVal, (user?.debt || 0) > 0 && { color: colors.danger }]}>{formatPrice(user?.debt || 0)}</Text>
+                <Text style={[s.creditVal, (user?.debt || 0) > 0 && { color: c.danger }]}>{formatPrice(user?.debt || 0)}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -74,9 +76,9 @@ export default function DealerDashboard() {
         {/* Status */}
         <View style={s.statusRow}>
           {[
-            { icon: Clock, val: pending, label: 'Kutilmoqda', color: colors.warning },
-            { icon: Zap, val: preparing, label: 'Jarayonda', color: colors.blue },
-            { icon: Truck, val: delivered, label: 'Yetkazildi', color: colors.success },
+            { icon: Clock, val: pending, label: 'Kutilmoqda', color: c.warning },
+            { icon: Zap, val: preparing, label: 'Jarayonda', color: c.blue },
+            { icon: Truck, val: delivered, label: 'Yetkazildi', color: c.success },
           ].map((c, i) => (
             <View key={i} style={s.statusCard}>
               <View style={[s.statusIcon, { backgroundColor: c.color + '18' }]}>
@@ -94,7 +96,7 @@ export default function DealerDashboard() {
             {orders.slice(0, 5).map(order => (
               <View key={order.id} style={s.orderCard} testID={`dealer-order-${order.id}`}>
                 <View style={s.orderHead}>
-                  <View style={s.codeBadge}><Hash size={11} color={colors.accent} /><Text style={s.codeText}>{order.order_code}</Text></View>
+                  <View style={s.codeBadge}><Hash size={11} color={c.accent} /><Text style={s.codeText}>{order.order_code}</Text></View>
                   <View style={[s.sBadge, { backgroundColor: (statusColors[order.status] || '#fff') + '18' }]}>
                     <View style={[s.sDot, { backgroundColor: statusColors[order.status] }]} />
                     <Text style={[s.sText, { color: statusColors[order.status] }]}>{statusLabels[order.status]}</Text>
@@ -122,11 +124,11 @@ export default function DealerDashboard() {
 }
 
 const s = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
+  c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
-  hi: { fontSize: 13, color: colors.textSec, fontWeight: '500' },
+  hi: { fontSize: 13, color: c.textSec, fontWeight: '500' },
   name: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
+  logoutBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.cardBorder },
   scroll: { paddingHorizontal: 24, paddingBottom: 100 },
   creditWrap: { marginBottom: 16, borderRadius: 24, overflow: 'hidden' },
   credit: { padding: 24, borderRadius: 24 },
@@ -138,23 +140,23 @@ const s = StyleSheet.create({
   creditLabel: { fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: '600' },
   creditVal: { fontSize: 24, fontWeight: '800', color: '#fff' },
   statusRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  statusCard: { flex: 1, backgroundColor: colors.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.cardBorder, gap: 6 },
+  statusCard: { flex: 1, backgroundColor: c.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: c.cardBorder, gap: 6 },
   statusIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   statusVal: { fontSize: 24, fontWeight: '800', color: '#fff' },
-  statusLabel: { fontSize: 9, color: colors.textSec, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
-  section: { fontSize: 11, color: colors.textTer, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12, fontWeight: '700' },
-  orderCard: { backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.cardBorder, padding: 16, marginBottom: 10 },
+  statusLabel: { fontSize: 9, color: c.textSec, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
+  section: { fontSize: 11, color: c.textTer, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12, fontWeight: '700' },
+  orderCard: { backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.cardBorder, padding: 16, marginBottom: 10 },
   orderHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  codeText: { fontSize: 12, fontWeight: '800', color: colors.accent, letterSpacing: 1, fontVariant: ['tabular-nums'] },
+  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.accentSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  codeText: { fontSize: 12, fontWeight: '800', color: c.accent, letterSpacing: 1, fontVariant: ['tabular-nums'] },
   sBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, gap: 4 },
   sDot: { width: 5, height: 5, borderRadius: 2.5 },
   sText: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   itemsPreview: { marginTop: 12 },
   itemThumb: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   itemThumbName: { fontSize: 12, fontWeight: '600', color: '#fff' },
-  itemThumbSize: { fontSize: 10, color: colors.textTer, marginTop: 1 },
+  itemThumbSize: { fontSize: 10, color: c.textTer, marginTop: 1 },
   orderFoot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.04)' },
-  orderSqm: { fontSize: 13, color: colors.textSec },
+  orderSqm: { fontSize: 13, color: c.textSec },
   orderPrice: { fontSize: 17, fontWeight: '800', color: '#fff' },
 });

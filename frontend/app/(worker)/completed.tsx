@@ -5,9 +5,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle, Hash, Ruler, Package } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors } from '../../src/utils/theme';
+import { useTheme } from '../../src/utils/theme';
 
 export default function WorkerCompleted() {
+  const c = useTheme();
+  const { formatPrice } = useCurrency();
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -22,7 +24,7 @@ export default function WorkerCompleted() {
 
   useEffect(() => { fetchTasks(); }, []);
 
-  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={colors.accent} style={{ flex: 1 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.c}><ActivityIndicator size="large" color={c.accent} style={{ flex: 1 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.c}>
@@ -42,12 +44,12 @@ export default function WorkerCompleted() {
         ) : tasks.map((task, i) => (
           <View key={`${task.order_id}-${task.item_index}`} style={s.card} testID={`completed-${i}`}>
             <View style={s.cardHead}>
-              <View style={s.codeBadge}><Hash size={11} color={colors.success} /><Text style={s.codeText}>{task.order_code}</Text></View>
-              <View style={s.doneBadge}><CheckCircle size={12} color={colors.success} /><Text style={s.doneText}>Bajarildi</Text></View>
+              <View style={s.codeBadge}><Hash size={11} color={c.success} /><Text style={s.codeText}>{task.order_code}</Text></View>
+              <View style={s.doneBadge}><CheckCircle size={12} color={c.success} /><Text style={s.doneText}>Bajarildi</Text></View>
             </View>
             <Text style={s.material}>{task.material_name}</Text>
             <View style={s.sizeRow}>
-              <Ruler size={14} color={colors.textSec} />
+              <Ruler size={14} color={c.textSec} />
               <Text style={s.size}>{task.width}m x {task.height}m = {task.sqm} kv.m</Text>
             </View>
           </View>
@@ -58,22 +60,22 @@ export default function WorkerCompleted() {
 }
 
 const s = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
+  c: { flex: 1, backgroundColor: c.bg },
   title: { fontSize: 26, fontWeight: '800', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
   countRow: { paddingHorizontal: 24, marginTop: 12 },
-  countCard: { backgroundColor: colors.successSoft, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: 'rgba(0,230,118,0.15)' },
-  countVal: { fontSize: 32, fontWeight: '800', color: colors.success },
-  countLabel: { fontSize: 12, color: colors.textSec, fontWeight: '600', marginTop: 2 },
+  countCard: { backgroundColor: c.successSoft, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: 'rgba(0,230,118,0.15)' },
+  countVal: { fontSize: 32, fontWeight: '800', color: c.success },
+  countLabel: { fontSize: 12, color: c.textSec, fontWeight: '600', marginTop: 2 },
   scroll: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
   empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: 15, color: colors.textTer },
-  card: { backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.cardBorder, padding: 18, marginBottom: 12 },
+  emptyText: { fontSize: 15, color: c.textTer },
+  card: { backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.cardBorder, padding: 18, marginBottom: 12 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.successSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  codeText: { fontSize: 12, fontWeight: '800', color: colors.success, letterSpacing: 1, fontVariant: ['tabular-nums'] },
+  codeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.successSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  codeText: { fontSize: 12, fontWeight: '800', color: c.success, letterSpacing: 1, fontVariant: ['tabular-nums'] },
   doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  doneText: { fontSize: 11, fontWeight: '700', color: colors.success },
+  doneText: { fontSize: 11, fontWeight: '700', color: c.success },
   material: { fontSize: 17, fontWeight: '700', color: '#fff', marginBottom: 8 },
   sizeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  size: { fontSize: 14, color: colors.textSec },
+  size: { fontSize: 14, color: c.textSec },
 });

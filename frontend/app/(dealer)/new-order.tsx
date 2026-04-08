@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Send, X, Check, Upload, Trash2, ChevronLeft, StickyNote, Package, FolderOpen } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors, formatPrice } from '../../src/utils/theme';
+import { useTheme, useCurrency } from '../../src/utils/theme';
 
 type OrderItem = {
   material_id: string; material_name: string; width: string; height: string;
@@ -14,6 +14,8 @@ type OrderItem = {
 };
 
 export default function NewOrder() {
+  const c = useTheme();
+  const { formatPrice } = useCurrency();
   const [categories, setCategories] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +102,7 @@ export default function NewOrder() {
             {categories.map(cat => (
               <TouchableOpacity key={cat.id} style={s.catCard} onPress={() => setSelectedCat(cat)} activeOpacity={0.7}>
                 <View style={s.catIconWrap}>
-                  <FolderOpen size={28} color={colors.accent} />
+                  <FolderOpen size={28} color={c.accent} />
                 </View>
                 <Text style={s.catCardName}>{cat.name}</Text>
                 <Text style={s.catCardCount}>{cat.material_count || 0} mahsulot</Text>
@@ -109,7 +111,7 @@ export default function NewOrder() {
             {/* Show all button */}
             <TouchableOpacity style={[s.catCard, { borderColor: 'rgba(0,230,118,0.2)', backgroundColor: 'rgba(0,230,118,0.03)' }]} onPress={() => setSelectedCat({ id: '__all__', name: 'Barchasi' })}>
               <View style={[s.catIconWrap, { backgroundColor: 'rgba(0,230,118,0.1)' }]}>
-                <Package size={28} color={colors.success} />
+                <Package size={28} color={c.success} />
               </View>
               <Text style={s.catCardName}>Barchasi</Text>
               <Text style={s.catCardCount}>{materials.length} mahsulot</Text>
@@ -119,7 +121,7 @@ export default function NewOrder() {
           <>
             {/* Back to categories */}
             <TouchableOpacity style={s.backBtn} onPress={() => { setSelectedCat(null); setExpandedId(null); setWidth(''); setHeight(''); }}>
-              <ChevronLeft size={18} color={colors.accent} />
+              <ChevronLeft size={18} color={c.accent} />
               <Text style={s.backText}>Kategoriyalar</Text>
             </TouchableOpacity>
 
@@ -226,7 +228,7 @@ export default function NewOrder() {
               </View>
               <View style={s.bottomBtns}>
                 <TouchableOpacity style={s.noteBtn} onPress={() => setShowNotes(!showNotes)}>
-                  <StickyNote size={16} color={notes ? colors.accent : 'rgba(255,255,255,0.3)'} />
+                  <StickyNote size={16} color={notes ? c.accent : 'rgba(255,255,255,0.3)'} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[s.submitBtn, submitting && { opacity: 0.6 }]} onPress={submitOrder} disabled={submitting}>
                   {submitting ? <ActivityIndicator color="#000" size="small" /> : (
@@ -243,23 +245,23 @@ export default function NewOrder() {
 }
 
 const s = StyleSheet.create({
-  c: { flex: 1, backgroundColor: colors.bg },
+  c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   subtitle: { fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 },
-  countBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  countBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   countText: { fontSize: 15, fontWeight: '800', color: '#fff' },
   successBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, marginBottom: 8, paddingVertical: 14, backgroundColor: 'rgba(0,200,83,0.08)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(0,200,83,0.15)' },
   successText: { color: '#00C853', fontSize: 15, fontWeight: '700' },
   // Categories grid
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, paddingTop: 16, gap: 10 },
-  catCard: { width: '47%', flexGrow: 1, backgroundColor: colors.card, borderRadius: 20, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: colors.cardBorder, gap: 8 },
-  catIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  catCard: { width: '47%', flexGrow: 1, backgroundColor: c.card, borderRadius: 20, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: c.cardBorder, gap: 8 },
+  catIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   catCardName: { fontSize: 16, fontWeight: '700', color: '#fff' },
   catCardCount: { fontSize: 12, color: 'rgba(255,255,255,0.35)' },
   // Back button
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 20, paddingVertical: 8 },
-  backText: { fontSize: 14, color: colors.accent, fontWeight: '600' },
+  backText: { fontSize: 14, color: c.accent, fontWeight: '600' },
   // Materials list
   listContent: { paddingHorizontal: 16 },
   matCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 10, overflow: 'hidden' },
@@ -274,13 +276,13 @@ const s = StyleSheet.create({
   matPrice: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
   matPriceUnit: { fontSize: 11, color: 'rgba(255,255,255,0.3)' },
   matBadge: { backgroundColor: 'rgba(0,230,118,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  matBadgeText: { fontSize: 11, fontWeight: '700', color: colors.success },
+  matBadgeText: { fontSize: 11, fontWeight: '700', color: c.success },
   expandBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
   expandBtnActive: { backgroundColor: '#fff' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 12, gap: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,230,118,0.08)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(0,230,118,0.12)' },
   chipText: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
-  chipsTotal: { fontSize: 13, fontWeight: '700', color: colors.success, marginLeft: 4 },
+  chipsTotal: { fontSize: 13, fontWeight: '700', color: c.success, marginLeft: 4 },
   expanded: { paddingHorizontal: 12, paddingBottom: 14 },
   existItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 10, marginBottom: 6 },
   existSize: { fontSize: 14, fontWeight: '600', color: '#fff' },
@@ -294,7 +296,7 @@ const s = StyleSheet.create({
   addBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   addBtnOff: { backgroundColor: 'rgba(255,255,255,0.06)' },
   liveCalc: { marginTop: 8, alignItems: 'center' },
-  liveCalcText: { fontSize: 13, color: colors.accent, fontWeight: '600' },
+  liveCalcText: { fontSize: 13, color: c.accent, fontWeight: '600' },
   // Bottom
   bottom: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#0a0a0f', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', paddingBottom: Platform.OS === 'ios' ? 28 : 16 },
   notesWrap: { paddingHorizontal: 16, paddingTop: 12 },
