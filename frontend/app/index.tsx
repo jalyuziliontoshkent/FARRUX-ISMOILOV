@@ -14,6 +14,7 @@ const LOGO_URL = 'https://customer-assets.emergentagent.com/job_dealer-dashboard
 
 export default function Login() {
   const c = useTheme();
+  const s = createStyles(c);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -79,7 +80,7 @@ export default function Login() {
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
   safe: { flex: 1 },
   content: { alignItems: 'center', paddingHorizontal: 32 },

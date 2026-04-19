@@ -11,7 +11,7 @@ import { useTheme } from '../../src/utils/theme';
 
 export default function WorkerTasks() {
   const c = useTheme();
-  const { formatPrice } = useCurrency();
+  const s = createStyles(c);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -21,7 +21,7 @@ export default function WorkerTasks() {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const data = await api('/worker/tasks');
+      const data = await api('/orders/worker/tasks');
       setTasks(data.filter((t: any) => t.worker_status !== 'completed'));
       const u = await AsyncStorage.getItem('user');
       if (u) setUserName(JSON.parse(u).name || 'Ishchi');
@@ -36,7 +36,7 @@ export default function WorkerTasks() {
     if (completingIds.has(key)) return;
     setCompletingIds(prev => new Set(prev).add(key));
     try {
-      await api(`/worker/tasks/${orderId}/${itemIdx}/complete`, { method: 'PUT' });
+      await api(`/orders/worker/tasks/${orderId}/${itemIdx}/complete`, { method: 'PUT' });
       Alert.alert('Bajarildi!', 'Vazifa muvaffaqiyatli tugallandi');
       fetchTasks();
     } catch (e) { console.error(e); }
@@ -98,7 +98,7 @@ export default function WorkerTasks() {
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
   hi: { fontSize: 13, color: c.textSec, fontWeight: '500' },

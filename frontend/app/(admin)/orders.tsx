@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Package, Check, X, Hash, Clock, User, Layers, Truck, FileSpreadsheet } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { api } from '../_layout';
 import { useTheme, useCurrency, statusLabels } from '../../src/utils/theme';

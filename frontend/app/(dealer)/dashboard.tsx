@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,11 +8,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { LogOut, Clock, Zap, Truck, CreditCard, Hash } from 'lucide-react-native';
 import { api } from '../_layout';
-import { colors, formatPrice, statusColors, statusLabels } from '../../src/utils/theme';
+import { useTheme, useCurrency, statusColors, statusLabels } from '../../src/utils/theme';
 
 export default function DealerDashboard() {
   const c = useTheme();
   const { formatPrice } = useCurrency();
+  const s = createStyles(c);
   const [orders, setOrders] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +25,12 @@ export default function DealerDashboard() {
       const [ordersData, userData] = await Promise.all([api('/orders'), AsyncStorage.getItem('user')]);
       setOrders(ordersData);
       if (userData) setUser(JSON.parse(userData));
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      if (e.message && e.message !== 'Sessiya yakunlandi. Qaytadan kiring.') {
+        Alert.alert('Xatolik', e.message);
+      }
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -123,7 +129,7 @@ export default function DealerDashboard() {
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
   hi: { fontSize: 13, color: c.textSec, fontWeight: '500' },

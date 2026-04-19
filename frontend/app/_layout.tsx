@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,24 +22,42 @@ export type AuthState = {
   loading: boolean;
 };
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.replace(/\/$/, '');
 
 export const api = async (path: string, options: any = {}) => {
+  if (!BACKEND_URL) {
+    throw new Error("EXPO_PUBLIC_BACKEND_URL sozlanmagan");
+  }
   const token = await AsyncStorage.getItem('token');
   const headers: any = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BACKEND_URL}/api${path}`, { ...options, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Xatolik yuz berdi' }));
-    throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
+  
+  try {
+    const res = await fetch(`${BACKEND_URL}/api${path}`, { ...options, headers });
+    
+    if (res.status === 401) {
+      await AsyncStorage.multiRemove(['token', 'user']);
+      router.replace('/');
+      throw new Error('Sessiya yakunlandi. Qaytadan kiring.');
+    }
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Server xatosi yoki tarmoq muammosi' }));
+      throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
+    }
+    return res.json();
+  } catch (error: any) {
+    if (error.name === 'TypeError' && error.message.includes('Network request failed')) {
+      throw new Error("Internet aloqasi yo'q yoki server ishlamayapti");
+    }
+    throw error;
   }
-  return res.json();
 };
 
 export default function RootLayout() {
   const [auth, setAuth] = useState<AuthState>({ user: null, token: null, loading: true });
   const segments = useSegments();
-  const router = useRouter();
+  const routerHook = useRouter();
 
   const checkAuth = useCallback(async () => {
     try {
@@ -71,14 +89,14 @@ export default function RootLayout() {
     if (auth.loading) return;
     const inAuthGroup = segments[0] === '(admin)' || segments[0] === '(dealer)' || segments[0] === '(worker)';
     if (!auth.user && inAuthGroup) {
-      router.replace('/');
+      routerHook.replace('/');
     } else if (auth.user) {
       if (auth.user.role === 'admin' && segments[0] !== '(admin)') {
-        router.replace('/(admin)/dashboard');
+        routerHook.replace('/(admin)/dashboard');
       } else if (auth.user.role === 'dealer' && segments[0] !== '(dealer)') {
-        router.replace('/(dealer)/dashboard');
+        routerHook.replace('/(dealer)/dashboard');
       } else if (auth.user.role === 'worker' && segments[0] !== '(worker)') {
-        router.replace('/(worker)/tasks');
+        routerHook.replace('/(worker)/tasks');
       }
     }
   }, [auth.user, auth.loading]);

@@ -5,11 +5,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Package, Truck, Phone, Hash } from 'lucide-react-native';
 import { api } from '../_layout';
-import { useTheme, useCurrency, statusLabels } from '../../src/utils/theme';
+import { useTheme, useCurrency, statusColors, statusLabels } from '../../src/utils/theme';
 
 export default function DealerOrders() {
   const c = useTheme();
   const { formatPrice } = useCurrency();
+  const s = createStyles(c);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -101,7 +102,7 @@ export default function DealerOrders() {
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   title: { fontSize: 26, fontWeight: '800', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },

@@ -9,14 +9,14 @@ import { useTheme } from '../../src/utils/theme';
 
 export default function WorkerCompleted() {
   const c = useTheme();
-  const { formatPrice } = useCurrency();
+  const s = createStyles(c);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     try {
-      const data = await api('/worker/tasks');
+      const data = await api('/orders/worker/tasks');
       setTasks(data.filter((t: any) => t.worker_status === 'completed'));
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
@@ -59,7 +59,7 @@ export default function WorkerCompleted() {
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   c: { flex: 1, backgroundColor: c.bg },
   title: { fontSize: 26, fontWeight: '800', color: '#fff', paddingHorizontal: 24, paddingTop: 16, letterSpacing: -0.5 },
   countRow: { paddingHorizontal: 24, marginTop: 12 },

@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DealerChat() {
   const c = useTheme();
+  const styles = createStyles(c);
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -125,7 +126,7 @@ export default function DealerChat() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   chatHeader: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12,

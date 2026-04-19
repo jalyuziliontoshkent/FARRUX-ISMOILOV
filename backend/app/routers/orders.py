@@ -2,7 +2,7 @@
 Orders router - /api/orders/*
 """
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.orders import OrderCreate, OrderStatusUpdate, AssignItemRequest, DeliveryInfoRequest
 from app.services.order_service import OrderService
 from app.deps import get_current_user, require_admin, require_worker

@@ -16,6 +16,7 @@ type OrderItem = {
 export default function NewOrder() {
   const c = useTheme();
   const { formatPrice } = useCurrency();
+  const s = createStyles(c);
   const [categories, setCategories] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,7 +245,7 @@ export default function NewOrder() {
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>) => StyleSheet.create({
   c: { flex: 1, backgroundColor: c.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
