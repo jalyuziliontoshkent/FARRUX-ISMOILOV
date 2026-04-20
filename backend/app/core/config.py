@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     CBU_API_URL: str = "https://cbu.uz/oz/arkhiv-kursov-valyut/json/USD/"
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "dotenv.txt"),
         env_file_encoding="utf-8",
         extra="ignore"
     )
