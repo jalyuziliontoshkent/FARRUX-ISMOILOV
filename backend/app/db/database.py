@@ -43,6 +43,7 @@ class Database:
                 max_size=settings.DB_POOL_MAX_SIZE,
                 command_timeout=settings.DB_COMMAND_TIMEOUT,
                 init=self._init_connection,
+                statement_cache_size=0,
             )
             logger.info(f"Connected to Supabase PostgreSQL")
         except Exception as e:
